@@ -1,0 +1,2 @@
+﻿symbol,signal_time,entry_price,atr14_daily,stop_loss,take_profit_4atr,risk_per_share,shares,cash_limited,risk_capital,risk_amount,position_value
+GMD,2026-09-21 14:45:00,77.0,1.3642857142857159,74.27142857142857,82.45714285714287,2.7285714285714278,366400,False,1000000.0,999748.5714285711,28212800.0

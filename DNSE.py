@@ -16,8 +16,8 @@ log = logging.getLogger("api")
 # CẤU HÌNH
 # ==============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DNSE_API_KEY = os.getenv("DNSE_API_KEY", "")
-DNSE_SECRET_KEY = os.getenv("DNSE_SECRET_KEY", "")
+DNSE_API_KEY = os.getenv("DNSE_API_KEY", "eyJvcmciOiJkbnNlIiwiaWQiOiI1ZWVjYzY0YTY5ZjI0ZmE5YTU1ODMwM2Y5ZjhiMzVkMiIsImgiOiJtdXJtdXIxMjgifQ==")
+DNSE_SECRET_KEY = os.getenv("DNSE_SECRET_KEY", "IUPiXi7W5Xl2fDIKrU6HpmrGJGHwWIWwwwYVemi5yx2Hlsz4E5RQoZYWHYjKfJICImfeokRO1n8Je-FGvGUEXg")
 URL_DNSE_AUTH = "https://services.entrade.com.vn/dnse-auth-service/v1/login"          # CHƯA xác minh
 URL_DNSE_CHART_STOCK = (                                                              # CHƯA xác minh, thử lần lượt
     "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
@@ -28,18 +28,68 @@ URL_DNSE_CHART_INDEX = ("https://services.entrade.com.vn/chart-api/v2/ohlcs/inde
 # >>> ĐƯỜNG DẪN CSV BCTC DỰ PHÒNG: bù kỳ / chỉ số mà vnstock thiếu <<<
 FINANCIAL_CSV_PATH = os.getenv(
     "FINANCIAL_CSV_PATH",
-    os.path.join(BASE_DIR, "data", "/Users/thylnh.iu/Documents/Gói phần mềm ứng dụng cho tài chính 1/Filedata.csv"),
+    os.path.join(BASE_DIR, "/Users/thylnh.iu/Documents/Gói phần mềm ứng dụng cho tài chính 1/Filedata.csv"),
 )
 
 INDEX_SYMBOLS = {"VNINDEX", "VN30", "HNXINDEX", "HNX30", "UPCOMINDEX"}   # mã chỉ số (không nhân PRICE_MULTIPLIER)
-DEFAULT_INDEXES = ["VNINDEX"]                                            # tự thêm vào collect_prices
-DEFAULT_SYMBOLS = [
-    "VCB", "BID", "CTG", "TCB", "MBB", "ACB", "SSI", "VCI", "HCM", "VND",
-    "VIC", "VHM", "KDH", "NLG", "HPG", "HSG", "NKG", "MWG", "FRT", "PNJ",
-    "FPT", "CMG", "VNM", "MSN", "SAB", "GAS", "PLX", "POW", "GMD", "REE",
-]
+DEFAULT_INDEXES = ["VNINDEX"]
 
-TIMEOUT, MAX_RETRIES, RETRY_DELAY, REQUEST_PAUSE = 15, 3, 1.5, 0.5
+DEFAULT_SYMBOLS = [
+    # --- 1. Ngân hàng (22 mã) ---
+    "VCB", "BID", "CTG", "TCB", "MBB", "ACB", "VPB", "STB", "HDB", "TPB",
+    "LPB", "SHB", "MSB", "VIB", "EIB", "SSB", "OCB", "BAB", "ABB", "NAB",
+    "SGB", "BVB",
+
+    # --- 2. Chứng khoán (23 mã) ---
+    "SSI", "VCI", "HCM", "VND", "MBS", "SHS", "FTS", "CTS", "BSI", "AGR",
+    "ORS", "VDS", "BVS", "IVS", "TCI", "VIX", "SBS", "TVB", "PSI", "WSS",
+    "APG", "EIV", "HBS",
+
+    # --- 3. Bất động sản Dân dụng & Khu công nghiệp (45 mã) ---
+    "VIC", "VHM", "VRE", "NVL", "KDH", "NLG", "PDR", "DXG", "DIG", "CEO",
+    "KBC", "IDC", "SZC", "ITA", "SIP", "LHGP", "BCM", "TCH", "HDG", "NTH",
+    "CRE", "KHG", "DXS", "HQC", "SCR", "LDG", "CIIC", "NBB", "IJC", "AGG",
+    "HDC", "D2D", "NTC", "TIP", "VRG", "DRH", "SJS", "L14", "VC3", "IDV",
+    "DTG", "TDH", "ITC", "STL", "CCL",
+
+    # --- 4. Thép, Vật liệu xây dựng & Hóa chất (30 mã) ---
+    "HPG", "HSG", "NKG", "SMC", "TLH", "POM", "VGS", "DGC", "DCM", "DPM",
+    "CSV", "BFC", "LAS", "PLC", "HT1", "BCC", "BMP", "NTP", "DPR", "PHR",
+    "GVR", "DRI", "TNC", "VIS", "HLA", "KHB", "HOM", "C32", "DHA", "LBM",
+
+    # --- 5. Bán lẻ, Tiêu dùng, Nông nghiệp & Đồ uống (35 mã) ---
+    "MWG", "FRT", "PNJ", "MSN", "VNM", "SAB", "BHN", "DGW", "HAX", "PET",
+    "KDC", "MCH", "QNS", "TLG", "DBC", "BAF", "HNG", "HAG", "PAN", "LTG",
+    "VCF", "SBT", "SLS", "LSS", "MCM", "CLM", "TAR", "BFN", "BBC", "NAF",
+    "VHE", "TSC", "SJ1", "APF", "LIX",
+
+    # --- 6. Công nghệ, Viễn thông & Vận tải, Logistics, Cảng biển (35 mã) ---
+    "FPT", "CMG", "ELC", "CTR", "FOX", "VGI", "SGP", "GMD", "HAH", "VSC",
+    "VJC", "HVN", "AST", "ACV", "TMS", "ILB", "SFI", "SAD", "PVT", "PVP",
+    "VIP", "VTO", "SCT", "PDN", "CLL", "TCO", "PJT", "ITD", "SAM", "TTN",
+    "VTC", "SGT", "SRT", "HRT", "TTV",
+
+    # --- 7. Dầu khí, Năng lượng, Điện & Nước (35 mã) ---
+    "GAS", "PLX", "POW", "PVD", "PVS", "PVC", "PVB", "BSR", "OIL", "REE",
+    "PC1", "GEG", "TTA", "NT2", "QTP", "HND", "SJD", "VSH", "SNC", "PGD",
+    "CNG", "ASP", "PGS", "PVG", "TV4", "TBC", "VPD", "SJD", "SEB", "NED",
+    "BTP", "PPA", "DNW", "TDW", "TDM",
+
+    # --- 8. Dệt may, Thủy sản, Gỗ & Cao su tự nhiên (30 mã) ---
+    "VHC", "ANV", "IDI", "FMC", "MPC", "CMX", "TNG", "MSH", "STK", "GIL",
+    "TTC", "GDT", "VGT", "TCM", "VTK", "ADS", "MDT", "HTG", "AAM", "ACL",
+    "BLF", "SSN", "PTB", "TTF", "GTA", "ACG", "TRC", "RTB", "HRC", "DRI",
+
+    # --- 9. Xây dựng, Đầu tư công & Hạ tầng (30 mã) ---
+    "VCG", "HHV", "C4G", "FCN", "LCG", "CTD", "HBC", "DCN", "DTI", "KSB",
+    "SCN", "G36", "TV2", "HID", "EVG", "HUB", "LIG", "VNE", "TBD", "TCD",
+    "BOT", "C92", "PNE", "KPF", "S99", "SCI", "HDA", "PXI", "PXS", "L40",
+
+    # --- 10. Dược phẩm, Y tế & Khác (15 mã) ---
+    "DHG", "IMP", "TRA", "DBD", "DMC", "DCL", "PMC", "AMV", "JVC", "FIT",
+    "RAL", "VMD", "LDP", "SPM", "DP3"
+]
+TIMEOUT, MAX_RETRIES, RETRY_DELAY, REQUEST_PAUSE = 15, 3, 1.5, 3.5
 COLLECT_RESOLUTION = "15"        # nến 15 phút (quyết định của nhóm)
 CANDLE_CLOSE_DELAY = 20          # giây chờ sau khi nến đóng rồi mới gọi API
 WARMUP_DAYS = 7                  # số ngày tải lùi cho EMA50, RSI14, ATR14...
@@ -47,7 +97,7 @@ TOKEN_REFRESH_SECONDS = 4 * 3600
 BAR_TIME_IS_START = True         # CHƯA xác minh: 't' của DNSE là giờ BẮT ĐẦU nến. Nếu là giờ kết thúc -> False
 PRICE_MULTIPLIER = {"DNSE": 1, "VNSTOCK": 1}   # đặt 1000 nếu nguồn trả giá theo nghìn đồng; 2 nguồn phải CÙNG đơn vị
 MAX_FINANCE_PERIODS = 10
-VNSTOCK_CALL_INTERVAL = 3.2      # giây giữa 2 lần gọi vnstock (bản cộng đồng giới hạn ~20 request/phút). Có API key thì giảm.
+VNSTOCK_CALL_INTERVAL = 3.5      # giãn cách tối thiểu giữa các lần gọi vnstock để không dính rate limit 20 req/phút
 VNSTOCK_RETRIES = 3
 
 VN_TZ = timezone(timedelta(hours=7))
@@ -63,7 +113,6 @@ METRIC_DIGITS = {"roe": 4, "roa": 4, "eps": 2, "pe": 2, "pb": 2,
                  "net_margin": 4, "debt_to_equity": 4, "profit_after_tax": 2}
 KNOWN_SOURCES = {"DNSE", "VNSTOCK", "vnstock", "csv", "vnstock+csv", "none"}
 
-# Tên cột thay đổi theo phiên bản vnstock / file CSV -> khớp theo danh sách tên đã chuẩn hóa (ưu tiên từ trái sang)
 METRIC_ALIASES = {
     "roe": ("roe", "returnonequity", "tss"),
     "roa": ("roa", "returnonassets", "tst"),
@@ -99,8 +148,21 @@ def setup_logging(level: int = logging.INFO) -> None:
 # ==============================================================================
 # HÀM DÙNG CHUNG
 # ==============================================================================
+_last_request_ts = 0.0
+
+
+def _rate_limit_sleep(min_gap: float = REQUEST_PAUSE) -> None:
+    """Giữ khoảng nghỉ tối thiểu giữa các request, không làm ảnh hưởng lịch thu thập 15 phút."""
+    global _last_request_ts
+    now = time.monotonic()
+    if _last_request_ts:
+        wait = min_gap - (now - _last_request_ts)
+        if wait > 0:
+            time.sleep(wait)
+    _last_request_ts = time.monotonic()
+
+
 def validate_symbol(symbol: str) -> str:
-    """Chấp nhận mọi mã 3-10 ký tự chữ/số (cổ phiếu hoặc chỉ số). Không có danh sách mã bị chặn."""
     symbol = str(symbol).upper().strip()
     if not re.fullmatch(r"[A-Z0-9]{3,10}", symbol):
         raise ValueError(f"Mã không hợp lệ: '{symbol}'")
@@ -108,13 +170,12 @@ def validate_symbol(symbol: str) -> str:
 
 
 def _norm(text) -> str:
-    """Bỏ dấu tiếng Việt / ký tự đặc biệt, viết thường: 'ROE (%)' -> 'roe'."""
     text = unicodedata.normalize("NFD", str(text).replace("đ", "d").replace("Đ", "D"))
     return re.sub(r"[^a-z0-9]", "", "".join(c for c in text if unicodedata.category(c) != "Mn").lower())
 
 
 def _get_json(url: str, params: dict, headers: dict) -> dict:
-    """GET có retry cho lỗi mạng / 5xx; lỗi 4xx và JSON hỏng không retry."""
+    _rate_limit_sleep(REQUEST_PAUSE)
     last: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -134,7 +195,6 @@ def _get_json(url: str, params: dict, headers: dict) -> dict:
 
 
 def save_csv(df: pd.DataFrame, path: str, keys: list[str]) -> int:
-    """Ghi/nối CSV, loại trùng theo `keys` (dòng mới ghi đè dòng cũ). Trả về tổng số dòng."""
     if df.empty:
         return 0
     df = df.copy()
@@ -149,17 +209,17 @@ def save_csv(df: pd.DataFrame, path: str, keys: list[str]) -> int:
 
 
 # ==============================================================================
-# GIÁ: DNSE (chính) + vnstock (dự phòng) - cổ phiếu và chỉ số (VNINDEX...)
+# GIÁ: DNSE (chính) + vnstock (dự phòng)
 # ==============================================================================
 _token = {"value": "", "at": 0.0}
 
 
 def dnse_token() -> str:
-    """Token DNSE (tự lấy lại sau TOKEN_REFRESH_SECONDS). Không có key/lỗi -> '' (gọi công khai)."""
     if not DNSE_API_KEY:
         return ""
     if _token["value"] and time.time() - _token["at"] < TOKEN_REFRESH_SECONDS:
         return _token["value"]
+    _rate_limit_sleep(REQUEST_PAUSE)
     payload = {"apiKey": DNSE_API_KEY, **({"secretKey": DNSE_SECRET_KEY} if DNSE_SECRET_KEY else {})}
     try:
         res = requests.post(URL_DNSE_AUTH, json=payload, headers=HEADERS, timeout=TIMEOUT)
@@ -176,7 +236,6 @@ def dnse_token() -> str:
 
 
 def standardize_ohlcv(raw: pd.DataFrame, symbol: str, resolution: str, source: str, time_is_unix: bool) -> pd.DataFrame:
-    """Làm sạch nến của MỌI nguồn và đưa về PRICE_COLUMNS (giờ VN, không kèm múi giờ)."""
     need = ["time", "open", "high", "low", "close", "volume"]
     missing = [c for c in need if c not in raw.columns]
     if missing:
@@ -203,7 +262,6 @@ def standardize_ohlcv(raw: pd.DataFrame, symbol: str, resolution: str, source: s
 
 
 def drop_unclosed_candles(df: pd.DataFrame, resolution: str) -> pd.DataFrame:
-    """Bỏ nến chưa đóng (khung trong ngày) để tín hiệu không nhìn trước tương lai."""
     if resolution in ("1D", "1W"):
         return df
     now = datetime.now(VN_TZ).replace(tzinfo=None)
@@ -239,7 +297,7 @@ def fetch_prices_dnse(symbol: str, start: date, end: date, resolution: str) -> p
 
 
 def fetch_prices_vnstock(symbol: str, start: date, end: date, resolution: str) -> pd.DataFrame:
-    """Nguồn giá dự phòng (vnstock/VCI), dùng khi DNSE lỗi. Hỗ trợ cả VNINDEX."""
+    _rate_limit_sleep(VNSTOCK_CALL_INTERVAL)
     kwargs = {"start": start.isoformat(), "end": (end + timedelta(days=1)).isoformat(), "interval": VNSTOCK_INTERVALS[resolution]}
     try:
         from vnstock.api.quote import Quote
@@ -261,8 +319,6 @@ def fetch_prices_vnstock(symbol: str, start: date, end: date, resolution: str) -
 
 def fetch_prices(symbol: str, start: date, end: date, resolution: str, closed_only: bool = True,
                  source: str = "auto") -> pd.DataFrame:
-    """Giá 1 mã. source: 'auto' (DNSE rồi vnstock) | 'dnse' | 'vnstock'. Mọi nguồn lỗi -> RuntimeError;
-    chưa có nến đóng -> DataFrame rỗng."""
     symbol = validate_symbol(symbol)
     if resolution not in BAR_SECONDS:
         raise ValueError(f"resolution '{resolution}' không hỗ trợ. Chọn: {list(BAR_SECONDS)}")
@@ -274,7 +330,7 @@ def fetch_prices(symbol: str, start: date, end: date, resolution: str, closed_on
             df = fetch_prices_dnse(symbol, start, end, resolution) if src == "DNSE" \
                 else fetch_prices_vnstock(symbol, start, end, resolution)
             return drop_unclosed_candles(df, resolution) if closed_only else df
-        except (Exception, SystemExit) as err:  # noqa: BLE001 - vnstock có thể ném cả SystemExit khi quá giới hạn
+        except (BaseException) as err:
             errors.append(f"{src}: {err}")
     raise RuntimeError(" || ".join(errors))
 
@@ -282,8 +338,6 @@ def fetch_prices(symbol: str, start: date, end: date, resolution: str, closed_on
 def collect_prices(symbols: list[str], resolution: str = COLLECT_RESOLUTION, start: date | None = None,
                    end: date | None = None, pause: float = REQUEST_PAUSE, source: str = "auto",
                    indexes: list[str] = DEFAULT_INDEXES) -> pd.DataFrame:
-    """Giá nhiều mã (+ chỉ số trong `indexes`, mặc định VNINDEX) -> 1 DataFrame chuẩn.
-    Mã lỗi không làm dừng cả lô; cuối cùng ghi log mã nào còn thiếu."""
     end = end or datetime.now(VN_TZ).date()
     start = start or end - timedelta(days=180 if resolution in ("1D", "1W") else WARMUP_DAYS)
     names = list(dict.fromkeys(validate_symbol(s) for s in [*symbols, *indexes]))
@@ -299,7 +353,7 @@ def collect_prices(symbols: list[str], resolution: str = COLLECT_RESOLUTION, sta
             failed.append(sym)
             log.warning("%s: không lấy được giá: %s", sym, err)
         if pause > 0 and i < len(names) - 1:
-            time.sleep(pause)
+            _rate_limit_sleep(max(REQUEST_PAUSE, float(pause)))
     log.info("Giá: %d/%d mã có dữ liệu.", len(frames), len(names))
     if failed:
         log.warning("Thiếu giá của: %s", ", ".join(failed))
@@ -308,7 +362,6 @@ def collect_prices(symbols: list[str], resolution: str = COLLECT_RESOLUTION, sta
 
 # ---- Thu thập định kỳ đúng mốc nến đóng ----
 def next_collection_time(now: datetime, resolution: str = COLLECT_RESOLUTION, all_hours: bool = False) -> datetime:
-    """Mốc kế tiếp = giờ nến đóng (:00 :15 :30 :45) + CANDLE_CLOSE_DELAY. Bỏ nghỉ trưa/ngoài giờ/cuối tuần (không xử lý ngày lễ)."""
     step = BAR_SECONDS[resolution]
     base = (int(now.timestamp()) // step) * step
     for k in range(14 * 86400 // step + 2):
@@ -323,7 +376,6 @@ def next_collection_time(now: datetime, resolution: str = COLLECT_RESOLUTION, al
 
 def run_periodic(symbols: list[str], resolution: str = COLLECT_RESOLUTION, csv_path: str = "output/prices_15.csv",
                  iterations: int | None = None, all_hours: bool = False) -> None:
-    """Thu thập lặp lại đúng mốc nến đóng, nối vào CSV (không trùng). Ctrl+C để dừng."""
     n = 0
     try:
         while iterations is None or n < iterations:
@@ -332,7 +384,7 @@ def run_periodic(symbols: list[str], resolution: str = COLLECT_RESOLUTION, csv_p
                 df = collect_prices(symbols, resolution)
                 total = save_csv(df, csv_path, ["symbol", "resolution", "time"])
                 log.info("Lần %d: nhận %d nến, CSV có %d dòng.", n, len(df), total)
-            except Exception:  # noqa: BLE001 - 1 chu kỳ lỗi không được làm chết vòng lặp
+            except Exception:  # noqa: BLE001
                 log.exception("Chu kỳ #%d lỗi, thử lại ở chu kỳ sau.", n)
             if iterations is not None and n >= iterations:
                 break
@@ -345,14 +397,13 @@ def run_periodic(symbols: list[str], resolution: str = COLLECT_RESOLUTION, csv_p
 
 
 # ==============================================================================
-# CHỈ SỐ TÀI CHÍNH: vnstock (chính) + CSV (dự phòng) -> 1 format
+# CHỈ SỐ TÀI CHÍNH: vnstock (chính) + CSV (dự phòng)
 # ==============================================================================
 def _blank() -> pd.DataFrame:
     return pd.DataFrame({"period": pd.Series(dtype=str), **{m: pd.Series(dtype=float) for m in METRICS}})
 
 
 def _std_period(label, report_type: str) -> str | None:
-    """'2025-Q2' / 'Q2 2025' / '2025' -> '2025-Q2' (quý) hoặc '2025' (năm); không đọc được -> None."""
     text = str(label).upper()
     m = re.search(r"(?:19|20)\d{2}", text)
     if not m:
@@ -367,7 +418,6 @@ def _period_key(period: str) -> tuple[int, int]:
 
 
 def _default_anchor(report_type: str) -> str:
-    """Kỳ báo cáo mới nhất mà thị trường 'đáng lẽ' đã có: quý liền trước (hoặc năm liền trước)."""
     today = datetime.now(VN_TZ).date()
     if report_type == "year":
         return str(today.year - 1)
@@ -376,7 +426,6 @@ def _default_anchor(report_type: str) -> str:
 
 
 def _expected_periods(latest: str, n: int, report_type: str) -> list[str]:
-    """n kỳ liên tiếp tính ngược từ `latest`: '2026-Q2' -> ['2026-Q2','2026-Q1','2025-Q4',...]."""
     y, q = _period_key(latest)
     out = []
     for _ in range(n):
@@ -390,7 +439,6 @@ def _expected_periods(latest: str, n: int, report_type: str) -> list[str]:
 
 
 def _keys_of(label) -> set[str]:
-    """Khóa chuẩn hóa của 1 tên cột (hỗ trợ MultiIndex)."""
     if isinstance(label, tuple):
         parts = [_norm(p) for p in label if str(p).strip() and not str(p).startswith("Unnamed")]
         return set(parts) | {"".join(parts)}
@@ -398,7 +446,6 @@ def _keys_of(label) -> set[str]:
 
 
 def _find_column(df: pd.DataFrame, aliases):
-    """Khớp chính xác từng alias, không dùng tìm chuỗi con để tránh nhầm với period_date -> pe."""
     for alias in aliases:
         norm_alias = _norm(alias)
         for col in df.columns:
@@ -409,7 +456,6 @@ def _find_column(df: pd.DataFrame, aliases):
 
 
 def _coerce_csv_metric(df: pd.DataFrame) -> pd.DataFrame:
-    """Map các cột CSV thực tế sang chuẩn DNSE.py: pe, after_tax_margin, debt_to_equity, roe, roa."""
     df = df.copy()
     mapped = {}
     for key, aliases in METRIC_ALIASES.items():
@@ -424,7 +470,6 @@ def _coerce_csv_metric(df: pd.DataFrame) -> pd.DataFrame:
         df['net_margin'] = pd.to_numeric(df['after_tax_margin'], errors='coerce')
     if 'debt_to_equity' in df.columns and 'debt_to_equity' not in df.columns:
         df['debt_to_equity'] = pd.to_numeric(df['debt_to_equity'], errors='coerce')
-    # Mức lợi nhuận sau thuế thực tế thường không có trong CSV; nếu có market_cap và pe thì suy ra theo công thức PAT = market_cap / pe.
     if 'profit_after_tax' not in df.columns and 'market_cap' in df.columns and 'pe' in df.columns:
         market_cap = pd.to_numeric(df['market_cap'], errors='coerce')
         pe = pd.to_numeric(df['pe'], errors='coerce')
@@ -438,7 +483,6 @@ def _col(df: pd.DataFrame, col) -> pd.Series:
 
 
 def _from_period_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
-    """Bảng mỗi DÒNG là 1 kỳ, mỗi CỘT là 1 chỉ số."""
     out = pd.DataFrame(index=range(len(df)))
     for metric, aliases in METRIC_ALIASES.items():
         col = _find_column(df, aliases)
@@ -446,7 +490,7 @@ def _from_period_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
     y, q, p = (_find_column(df, k) for k in (YEAR_KEYS, QUARTER_KEYS, PERIOD_KEYS))
     by_period = [_std_period(v, report_type) for v in _col(df, p)] if p is not None else None
     if by_period and any(v and (report_type == "year" or "-Q" in v) for v in by_period):
-        out["period"] = by_period                                  # cột 'period' đã có nhãn quý, vd '2026-Q2'
+        out["period"] = by_period
     elif y is not None:
         years = pd.to_numeric(_col(df, y), errors="coerce").to_numpy()
         quarters = pd.to_numeric(_col(df, q), errors="coerce").to_numpy() if q is not None else [float("nan")] * len(df)
@@ -459,7 +503,6 @@ def _from_period_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
 
 
 def _from_item_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
-    """Bảng đảo chiều: mỗi DÒNG là 1 chỉ số (cột item/item_en/item_id), mỗi CỘT là 1 kỳ. Chịu được tên cột kỳ bị lặp."""
     flat = df.copy()
     flat.columns = [str(c) for c in flat.columns]
     meta = [i for i, c in enumerate(flat.columns) if _norm(c) in {"item", "itemen", "itemid"}]
@@ -482,103 +525,15 @@ def _from_item_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
 
 
 def to_tidy(df: pd.DataFrame | None, report_type: str) -> pd.DataFrame:
-    """Bảng nguồn bất kỳ -> ['period', *METRICS]: mỗi kỳ 1 dòng, không trùng, không có kỳ vô danh."""
     if df is None or df.empty:
         return _blank()
     is_items = any(_norm(c) in {"itemid", "itemen"} for c in df.columns)
     tidy = _from_item_rows(df, report_type) if is_items else _from_period_rows(df, report_type)
     tidy = tidy.dropna(subset=["period"])
-    tidy = tidy.groupby("period", as_index=False).first()          # first() lấy giá trị không-NaN đầu tiên
+    tidy = tidy.groupby("period", as_index=False).first()
     return tidy[["period", *METRICS]]
 
 
-def _extract_numeric_value(payload, candidates: tuple[str, ...]) -> float | None:
-    """Trích số khỏi dict / DataFrame / list nếu có khóa tương ứng: market_cap, marketcap, ..."""
-    if isinstance(payload, pd.DataFrame):
-        cols = {str(c).lower(): c for c in payload.columns}
-        for key in candidates:
-            if key.lower() in cols:
-                s = pd.to_numeric(payload[cols[key.lower()]], errors="coerce").dropna()
-                if not s.empty:
-                    return float(s.iloc[0])
-        for _, row in payload.iterrows():
-            val = _extract_numeric_value(row.to_dict(), candidates)
-            if val is not None:
-                return val
-        return None
-    if isinstance(payload, dict):
-        low = {str(k).lower(): v for k, v in payload.items()}
-        for key in candidates:
-            for candidate, value in low.items():
-                if candidate == key.lower() and value is not None and str(value).strip() not in ("", "nan", "None"):
-                    try:
-                        return float(value)
-                    except (TypeError, ValueError):
-                        continue
-        for value in payload.values():
-            val = _extract_numeric_value(value, candidates)
-            if val is not None:
-                return val
-    elif isinstance(payload, (list, tuple, set)):
-        for value in payload:
-            val = _extract_numeric_value(value, candidates)
-            if val is not None:
-                return val
-    elif hasattr(payload, "to_dict"):
-        return _extract_numeric_value(payload.to_dict(), candidates)
-    return None
-
-
-def _fetch_market_cap(symbol: str) -> float | None:
-    """Lấy market cap theo API thật của vnstock: s.company.overview() có cột market_cap."""
-    candidates = ("market_cap", "marketcap", "marketCap", "total_market_cap", "marketcapitalization", "totalMarketCap")
-    try:
-        from vnstock import Vnstock
-        stock = Vnstock().stock(symbol=symbol, source="VCI")
-        company = getattr(stock, "company", None)
-        if company is not None and hasattr(company, "overview"):
-            try:
-                overview = company.overview()
-                value = _extract_numeric_value(overview, candidates)
-                if value is not None:
-                    return float(value)
-            except Exception:  # noqa: BLE001
-                pass
-        quote = getattr(stock, "quote", None)
-        if quote is not None and hasattr(quote, "history"):
-            try:
-                info = getattr(stock, "company", None)
-                if info is not None and hasattr(info, "overview"):
-                    overview = info.overview()
-                    value = _extract_numeric_value(overview, candidates)
-                    if value is not None:
-                        return float(value)
-            except Exception:  # noqa: BLE001
-                pass
-    except Exception:  # noqa: BLE001
-        pass
-    return None
-
-
-def _estimate_profit_after_tax_ttm(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
-    """Ước tính LNST TTM chính xác nhất: PAT_TTM = market_cap / PE. Dùng cho kỳ mới nhất (latest period)."""
-    if df.empty:
-        return df
-    latest = df.iloc[0].copy()
-    pe = pd.to_numeric(latest.get("pe", float("nan")), errors="coerce")
-    market_cap = _fetch_market_cap(symbol)
-    if pd.notna(pe) and pe > 0 and market_cap is not None and pd.notna(market_cap):
-        estimated = float(market_cap) / float(pe)
-        latest["profit_after_tax"] = estimated
-        latest["status"] = "OK"
-        idx = df.index[df["period"] == latest["period"]]
-        if len(idx):
-            df.loc[idx[0], "profit_after_tax"] = estimated
-            df.loc[idx[0], "status"] = "OK"
-    return df
-
-
-# ---- Nguồn 1: vnstock ----
 _last_call = [0.0]
 
 
@@ -587,7 +542,7 @@ def _finance_client(symbol: str, period: str):
                                  ("vnstock.api.financial", ("Finance",))):
         try:
             module = __import__(module_name, fromlist=list(classes))
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         for name in classes:
             cls = getattr(module, name, None)
@@ -595,16 +550,15 @@ def _finance_client(symbol: str, period: str):
                 continue
             try:
                 return cls(source="VCI", symbol=symbol, period=period)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
     from vnstock import Vnstock
     return Vnstock().stock(symbol=symbol, source="VCI").finance
 
 
 def _call(method, report_type: str):
-    """Gọi ratio()/income_statement(): giãn cách VNSTOCK_CALL_INTERVAL giữa các lần gọi, tự thử lại khi bị giới hạn tốc độ.
-    KHÔNG dùng limit/dropna để không cắt mất kỳ."""
     for attempt in range(1, VNSTOCK_RETRIES + 1):
+        _rate_limit_sleep(VNSTOCK_CALL_INTERVAL)
         wait = VNSTOCK_CALL_INTERVAL - (time.time() - _last_call[0])
         if wait > 0:
             time.sleep(wait)
@@ -616,66 +570,39 @@ def _call(method, report_type: str):
                 except TypeError:
                     continue
             raise TypeError("Không gọi được phương thức tài chính của vnstock")
-        except (Exception, SystemExit) as err:  # noqa: BLE001 - vnstock có thể ném SystemExit khi quá giới hạn
+        except BaseException as err:
             limited = isinstance(err, SystemExit) or re.search(r"rate|limit|429|too many", str(err), re.I)
             if not limited or attempt == VNSTOCK_RETRIES:
-                raise
-            log.warning("vnstock bị giới hạn tốc độ, chờ %ds rồi thử lại (%s)", 20 * attempt, err)
-            time.sleep(20 * attempt)
-
-
-def _describe(df) -> str:
-    """Mô tả bảng vnstock trả về (tên cột + nhãn dòng nếu là bảng đảo chiều) để biết vì sao không nhận diện được."""
-    if df is None or not hasattr(df, "columns"):
-        return "không có bảng"
-    text = "cột=" + ", ".join(map(str, df.columns))
-    meta = [c for c in df.columns if _norm(c) in {"item", "itemen", "itemid"}]
-    if meta:
-        text += " | dòng=" + ", ".join(map(str, df[meta[0]].tolist()[:60]))
-    return text[:600]
+                raise RuntimeError(f"Lỗi gọi vnstock: {err}") from err
+            sleep_time = 30 * attempt
+            log.warning("vnstock bị giới hạn tốc độ (Rate Limit), tạm dừng %ds rồi thử lại...", sleep_time)
+            time.sleep(sleep_time)
 
 
 def _usable(tidy: pd.DataFrame, report_type: str) -> bool:
-    """Có ít nhất 1 kỳ đúng dạng (quý phải có '-Q') và có ít nhất 1 chỉ số."""
     good = tidy["period"].astype(str).str.contains("-Q") if report_type == "quarter" else tidy["period"].notna()
     return bool((good & tidy[METRICS].notna().any(axis=1)).any())
 
 
 def fetch_financial_vnstock(symbol: str, report_type: str) -> tuple[pd.DataFrame, str]:
-    """Chỉ số từ vnstock; EPS / LNST thiếu thì bù từ income_statement. Trả (bảng, ghi chú lỗi).
-    Ghi chú lỗi luôn nêu rõ tên cột nguồn khi không nhận diện được -> biết cần thêm alias nào."""
     tidy, notes = _blank(), []
     try:
         client = _finance_client(symbol, report_type)
         raw = _call(client.ratio, report_type)
         tidy = to_tidy(raw, report_type)
-    except (Exception, SystemExit) as err:  # noqa: BLE001
+    except BaseException as err:
         return tidy, f"{type(err).__name__}: {err}"
     if not _usable(tidy, report_type):
-        notes.append(f"ratio không dùng được (kỳ đọc được={list(tidy['period'])[:6]}; {_describe(raw)})")
+        notes.append("ratio không dùng được")
         tidy = _blank()
     if tidy.empty or tidy[["eps", "profit_after_tax"]].isna().any(axis=None):
         try:
             raw_inc = _call(client.income_statement, report_type)
             inc = to_tidy(raw_inc, report_type)[["period", "eps", "profit_after_tax"]]
             tidy = tidy.set_index("period").combine_first(inc.set_index("period")).reset_index()[["period", *METRICS]]
-            if inc[["eps", "profit_after_tax"]].isna().all(axis=None):
-                notes.append(f"income_statement không nhận diện được EPS/LNST ({_describe(raw_inc)})")
-        except (Exception, SystemExit) as err:  # noqa: BLE001
-            notes.append(f"income_statement: {type(err).__name__}: {err}")
+        except BaseException as err:
+            notes.append(f"income_statement: {err}")
     return tidy, " || ".join(notes)
-
-
-def inspect_vnstock(symbol: str, report_type: str = "quarter") -> None:
-    """In nguyên bảng vnstock trả về (ratio + income_statement) để đối chiếu tên cột / nhãn dòng."""
-    client = _finance_client(validate_symbol(symbol), report_type)
-    for name in ("ratio", "income_statement"):
-        try:
-            df = _call(getattr(client, name), report_type)
-            print(f"--- {name}: shape={getattr(df, 'shape', None)}\n{_describe(df)}")
-            print(df.head(8).to_string()[:3000])
-        except (Exception, SystemExit) as err:  # noqa: BLE001
-            print(f"--- {name}: LỖI {type(err).__name__}: {err}")
 
 
 # ---- Nguồn 2: CSV dự phòng ----
@@ -683,7 +610,6 @@ _warned_paths: set[str] = set()
 
 
 def _resolve_csv(path: str | None) -> str:
-    """Đường dẫn tương đối: thử theo thư mục đang chạy, rồi theo thư mục chứa file API.py."""
     path = path or FINANCIAL_CSV_PATH
     if os.path.isabs(path) or os.path.exists(path):
         return path
@@ -692,13 +618,9 @@ def _resolve_csv(path: str | None) -> str:
 
 
 def _read_financial_csv(path: str) -> pd.DataFrame:
-    """Đọc CSV có cả định dạng ',' và ';', không phụ thuộc vào kiểu tách trường."""
     for sep in (None, ",", ";"):
         try:
-            if sep is None:
-                df = pd.read_csv(path, engine="python")
-            else:
-                df = pd.read_csv(path, sep=sep, engine="python")
+            df = pd.read_csv(path, engine="python") if sep is None else pd.read_csv(path, sep=sep, engine="python")
             if not df.empty and isinstance(df.columns, pd.Index):
                 return df
         except Exception:
@@ -707,18 +629,16 @@ def _read_financial_csv(path: str) -> pd.DataFrame:
 
 
 def load_csv_backup(symbol: str, report_type: str, path: str | None = None) -> pd.DataFrame:
-    """Đọc CSV dự phòng (cột ticker, year_report, quarter_report, roe, roa, pe, pb, after_tax_margin,
-    debt_to_equity, profit_after_tax, eps...). Loại 'year' lấy dòng quý 4. Không có file/mã -> bảng rỗng."""
     path = _resolve_csv(path)
     if not os.path.exists(path):
         if path not in _warned_paths:
             _warned_paths.add(path)
-            log.warning("KHÔNG TÌM THẤY CSV dự phòng: %s (đang chạy ở %s)", os.path.abspath(path), os.getcwd())
+            log.warning("KHÔNG TÌM THẤY CSV dự phòng: %s", os.path.abspath(path))
         return _blank()
     try:
         df = _read_financial_csv(path)
         if df.empty:
-            raise ValueError("CSV rỗng hoặc không đọc được")
+            raise ValueError("CSV rỗng")
         df = _coerce_csv_metric(df)
         t = _find_column(df, TICKER_KEYS)
         if t is None:
@@ -728,36 +648,14 @@ def load_csv_backup(symbol: str, report_type: str, path: str | None = None) -> p
         if report_type == "year" and q is not None:
             df = df[pd.to_numeric(_col(df, q), errors="coerce") == 4]
         return to_tidy(df.reset_index(drop=True), report_type)
-    except Exception as err:  # noqa: BLE001
-        log.warning("%s: đọc CSV dự phòng '%s' lỗi: %s", symbol, path, err)
+    except Exception as err:
+        log.warning("%s: đọc CSV dự phòng lỗi: %s", symbol, err)
         return _blank()
-
-
-def diagnose_financials(symbol: str, report_type: str = "quarter", csv_path: str | None = None) -> None:
-    """In ra vì sao thiếu kỳ: đường dẫn CSV, cột nhận diện được, lỗi vnstock, và các kỳ mỗi nguồn có."""
-    symbol, path = validate_symbol(symbol), _resolve_csv(csv_path)
-    print(f"CSV: {os.path.abspath(path)} | tồn tại: {os.path.exists(path)}")
-    if os.path.exists(path):
-        raw = pd.read_csv(path)
-        found = {m: _find_column(raw, a) for m, a in METRIC_ALIASES.items()}
-        t = _find_column(raw, TICKER_KEYS)
-        print("Cột trong CSV:", list(raw.columns))
-        print("Chỉ số KHÔNG nhận diện được cột:", [m for m, c in found.items() if c is None] or "không")
-        print("Cột mã / năm / quý:", t, _find_column(raw, YEAR_KEYS), _find_column(raw, QUARTER_KEYS))
-        if t is not None:
-            print("Các mã có trong CSV:", sorted(raw[t].astype(str).str.upper().unique()))
-    vn, err = fetch_financial_vnstock(symbol, report_type)
-    bk = load_csv_backup(symbol, report_type, csv_path)
-    print(f"vnstock: {len(vn)} kỳ -> {sorted(vn['period'], key=_period_key, reverse=True)} | lỗi: {err or 'không'}")
-    print(f"CSV    : {len(bk)} kỳ -> {sorted(bk['period'], key=_period_key, reverse=True)}")
 
 
 # ---- Gộp + chuẩn hóa ----
 def get_financials(symbol: str, report_type: str = "quarter", max_periods: int = MAX_FINANCE_PERIODS,
                    csv_path: str | None = None) -> pd.DataFrame:
-    """Chỉ số tài chính của 1 mã theo FIN_COLUMNS, LUÔN đủ `max_periods` kỳ liên tiếp (kỳ mới nhất trước).
-    vnstock được ưu tiên; kỳ hoặc chỉ số vnstock thiếu sẽ được bù từ CSV (cột 'source' ghi rõ nguồn).
-    Kỳ mà cả 2 nguồn đều không có -> status 'MISSING' (chỉ số NaN). Mã không có dữ liệu nào vẫn trả đủ dòng MISSING."""
     symbol = validate_symbol(symbol)
     if report_type not in ("quarter", "year"):
         raise ValueError("report_type phải là 'quarter' hoặc 'year'")
@@ -765,11 +663,9 @@ def get_financials(symbol: str, report_type: str = "quarter", max_periods: int =
     vn, vn_err = fetch_financial_vnstock(symbol, report_type)
     vn = vn.set_index("period")
     bk = load_csv_backup(symbol, report_type, csv_path).set_index("period")
-    if vn_err:
-        log.warning("%s [%s]: vnstock lỗi: %s", symbol, report_type, vn_err)
 
     merged = vn.combine_first(bk)[METRICS]
-    if report_type == "quarter":                                   # bỏ dòng chỉ có năm, không có quý
+    if report_type == "quarter":
         merged = merged[merged.index.astype(str).str.contains("-Q")]
     latest = max([_default_anchor(report_type), *merged.index], key=_period_key)
     merged = merged.reindex(_expected_periods(latest, max_periods, report_type))
@@ -782,14 +678,8 @@ def get_financials(symbol: str, report_type: str = "quarter", max_periods: int =
                         for h, v, f in zip(has, vn_part.notna().any(axis=1), filled)]
     merged["status"] = ["MISSING" if not h else "OK" if a else "PARTIAL"
                         for h, a in zip(has, merged[METRICS].notna().all(axis=1))]
-    log.info("%s [%s]: vnstock %d kỳ, CSV %d kỳ -> %d/%d kỳ có dữ liệu.",
-             symbol, report_type, len(vn), len(bk), int(has.sum()), max_periods)
-    if not has.all():
-        log.warning("%s: THIẾU %d kỳ %s ở cả vnstock lẫn CSV: %s", symbol, int((~has).sum()), report_type,
-                    ", ".join(merged.index[~has]))
 
     merged = merged.reset_index()
-    merged = _estimate_profit_after_tax_ttm(merged, symbol)
     for m, digits in METRIC_DIGITS.items():
         merged[m] = merged[m].astype(float).round(digits)
     merged["symbol"], merged["period_type"] = symbol, report_type
@@ -798,27 +688,15 @@ def get_financials(symbol: str, report_type: str = "quarter", max_periods: int =
 
 def get_financials_many(symbols: list[str], report_type: str = "quarter", max_periods: int = MAX_FINANCE_PERIODS,
                         csv_path: str | None = None, pause: float = REQUEST_PAUSE) -> pd.DataFrame:
-    """Nhiều mã -> 1 DataFrame chuẩn: mỗi mã đúng max_periods dòng (không mã nào bị loại khỏi kết quả)."""
     frames = []
     for i, sym in enumerate(symbols):
         try:
             frames.append(get_financials(sym, report_type, max_periods, csv_path))
-        except ValueError as err:
+        except BaseException as err:
             log.warning("%s: %s", sym, err)
         if pause > 0 and i < len(symbols) - 1:
-            time.sleep(pause)
-    out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=FIN_COLUMNS)
-    if not out.empty:
-        empty = out.groupby("symbol")["status"].apply(lambda s: (s == "MISSING").all())
-        log.info("BCTC %s: %d/%d mã có dữ liệu.", report_type, int((~empty).sum()), len(empty))
-        if empty.any():
-            log.warning("Mã KHÔNG có dữ liệu BCTC ở cả vnstock lẫn CSV: %s", ", ".join(empty[empty].index))
-        for col in ("eps", "profit_after_tax"):
-            none = out.groupby("symbol")[col].apply(lambda s: s.isna().all())
-            none = none[none & ~empty.reindex(none.index)]
-            if not none.empty:
-                log.warning("Chưa có '%s' (vnstock lẫn CSV) cho: %s -> thêm cột này vào CSV dự phòng.", col, ", ".join(none.index))
-    return out
+            _rate_limit_sleep(max(REQUEST_PAUSE, float(pause)))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=FIN_COLUMNS)
 
 
 # ==============================================================================
@@ -826,7 +704,6 @@ def get_financials_many(symbols: list[str], report_type: str = "quarter", max_pe
 # ==============================================================================
 def check_data(prices: pd.DataFrame | None = None, fin: pd.DataFrame | None = None,
                expected: list[str] | None = None, since_quarter: str = "2024-Q1") -> None:
-    """In báo cáo: dòng trùng, nguồn lạ (ví dụ dữ liệu giả), mã thiếu, và kỳ còn thiếu (với quý: tính từ `since_quarter` đến nay)."""
     if prices is not None:
         print("=== GIÁ ===")
         if prices.empty:
@@ -857,18 +734,3 @@ def check_data(prices: pd.DataFrame | None = None, fin: pd.DataFrame | None = No
         if expected:
             absent = [s for s in expected if s not in set(fin.get("symbol", []))]
             print("Mã CHƯA có trong BCTC:", absent or "không")
-
-
-# ==============================================================================
-# VÍ DỤ SỬ DỤNG
-# ==============================================================================
-if __name__ == "__main__":
-    setup_logging()
-    codes = ["FPT", "VNM", "HPG", "SSI", "CTG", "MWG", "VIC", "HDB", "MSN", "GAS"]   # hoặc DEFAULT_SYMBOLS
-    prices = collect_prices(codes, "15")                     # + VNINDEX tự động
-    fin_q = get_financials_many(codes, "quarter")            # 10 quý gần nhất (2024-Q1 -> 2026-Q2), thiếu thì bù từ CSV
-    fin_y = get_financials_many(codes, "year")
-    fin = pd.concat([fin_q, fin_y], ignore_index=True)
-    save_csv(prices, "output/prices_15.csv", ["symbol", "resolution", "time"])
-    save_csv(fin[fin["status"] != "MISSING"], "output/financials.csv", ["symbol", "period_type", "period"])  # không ghi đè số thật bằng dòng MISSING
-    check_data(prices, fin, expected=codes)
