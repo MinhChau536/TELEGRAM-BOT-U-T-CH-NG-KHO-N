@@ -1,11 +1,3 @@
-"""API.py - Thu thập giá (DNSE, dự phòng vnstock) + BCTC (vnstock, dự phòng CSV), chuẩn hóa về 1 format.
-
-Hàm chính:
-    collect_prices(symbols, "15")            -> giá cổ phiếu + VNINDEX, theo PRICE_COLUMNS
-    get_financials_many(symbols, "quarter")  -> BCTC, LUÔN đủ 10 kỳ / mã (kỳ thiếu = MISSING), theo FIN_COLUMNS
-    check_data(prices, fin, expected=symbols)-> báo cáo: dòng trùng, nguồn lạ, mã / kỳ còn thiếu
-Không có bộ sinh dữ liệu giả: mọi số liệu đến từ DNSE, vnstock hoặc file CSV của bạn.
-"""
 from __future__ import annotations
 
 import logging
