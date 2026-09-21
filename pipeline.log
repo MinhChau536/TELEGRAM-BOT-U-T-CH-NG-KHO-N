@@ -1,0 +1,390 @@
+14:29:51 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+14:29:52 [INFO] [1/5] Đang xử lý FPT ...
+14:29:52 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+14:29:52 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+14:29:53 [INFO] [2/5] Đang xử lý VNM ...
+14:29:54 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+14:29:54 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+14:29:54 [INFO] [3/5] Đang xử lý HPG ...
+14:29:55 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+14:29:55 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+14:29:55 [INFO] [4/5] Đang xử lý VCB ...
+14:29:56 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+14:29:56 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+14:29:56 [INFO] [5/5] Đang xử lý MWG ...
+14:29:56 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+14:29:56 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+14:36:58 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+14:36:58 [INFO] [1/5] Đang xử lý FPT ...
+14:36:58 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+14:36:58 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+14:36:59 [INFO] [2/5] Đang xử lý VNM ...
+14:36:59 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+14:36:59 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+14:37:00 [INFO] [3/5] Đang xử lý HPG ...
+14:37:00 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+14:37:00 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+14:37:01 [INFO] [4/5] Đang xử lý VCB ...
+14:37:01 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+14:37:01 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+14:37:01 [INFO] [5/5] Đang xử lý MWG ...
+14:37:02 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+14:37:02 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+14:41:27 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+14:41:27 [INFO] [1/5] Đang xử lý FPT ...
+14:41:28 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+14:41:28 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+14:41:29 [INFO] [2/5] Đang xử lý VNM ...
+14:41:29 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+14:41:29 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+14:41:30 [INFO] [3/5] Đang xử lý HPG ...
+14:41:30 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+14:41:30 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+14:41:31 [INFO] [4/5] Đang xử lý VCB ...
+14:41:31 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+14:41:31 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+14:41:32 [INFO] [5/5] Đang xử lý MWG ...
+14:41:32 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+14:41:32 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+15:29:26 [INFO] Chưa gắn API Key DNSE -> chuyển sang chế độ dữ liệu công khai.
+15:29:26 [INFO] [1/5] Đang xử lý FPT ...
+15:29:27 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+15:29:27 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+15:29:27 [INFO] [2/5] Đang xử lý VNM ...
+15:29:28 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+15:29:28 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+15:29:28 [INFO] [3/5] Đang xử lý HPG ...
+15:29:29 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+15:29:29 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+15:29:29 [INFO] [4/5] Đang xử lý VCB ...
+15:29:30 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+15:29:30 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+15:29:30 [INFO] [5/5] Đang xử lý MWG ...
+15:29:31 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+15:29:31 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+15:42:10 [INFO] Chưa gắn API Key DNSE -> chuyển sang chế độ dữ liệu công khai.
+15:42:10 [INFO] [1/30] Đang xử lý VCB ...
+15:42:11 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+15:42:11 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+15:42:11 [INFO] [2/30] Đang xử lý BID ...
+15:42:11 [WARNING] Không lấy được chỉ số tài chính quarter của BID: No module named 'vnstock'
+15:42:11 [WARNING] Không lấy được chỉ số tài chính year của BID: No module named 'vnstock'
+15:42:12 [INFO] [3/30] Đang xử lý CTG ...
+15:42:12 [WARNING] Không lấy được chỉ số tài chính quarter của CTG: No module named 'vnstock'
+15:42:12 [WARNING] Không lấy được chỉ số tài chính year của CTG: No module named 'vnstock'
+15:42:12 [INFO] [4/30] Đang xử lý TCB ...
+15:42:13 [WARNING] Không lấy được chỉ số tài chính quarter của TCB: No module named 'vnstock'
+15:42:13 [WARNING] Không lấy được chỉ số tài chính year của TCB: No module named 'vnstock'
+15:42:13 [INFO] [5/30] Đang xử lý MBB ...
+15:42:14 [WARNING] Không lấy được chỉ số tài chính quarter của MBB: No module named 'vnstock'
+15:42:14 [WARNING] Không lấy được chỉ số tài chính year của MBB: No module named 'vnstock'
+15:42:14 [INFO] [6/30] Đang xử lý ACB ...
+15:42:14 [WARNING] Không lấy được chỉ số tài chính quarter của ACB: No module named 'vnstock'
+15:42:14 [WARNING] Không lấy được chỉ số tài chính year của ACB: No module named 'vnstock'
+15:42:15 [INFO] [7/30] Đang xử lý SSI ...
+15:42:15 [WARNING] Không lấy được chỉ số tài chính quarter của SSI: No module named 'vnstock'
+15:42:15 [WARNING] Không lấy được chỉ số tài chính year của SSI: No module named 'vnstock'
+15:42:16 [INFO] [8/30] Đang xử lý VCI ...
+15:42:16 [WARNING] Không lấy được chỉ số tài chính quarter của VCI: No module named 'vnstock'
+15:42:16 [WARNING] Không lấy được chỉ số tài chính year của VCI: No module named 'vnstock'
+15:42:17 [INFO] [9/30] Đang xử lý HCM ...
+15:42:17 [WARNING] Không lấy được chỉ số tài chính quarter của HCM: No module named 'vnstock'
+15:42:17 [WARNING] Không lấy được chỉ số tài chính year của HCM: No module named 'vnstock'
+15:42:18 [INFO] [10/30] Đang xử lý VND ...
+15:42:18 [WARNING] Không lấy được chỉ số tài chính quarter của VND: No module named 'vnstock'
+15:42:18 [WARNING] Không lấy được chỉ số tài chính year của VND: No module named 'vnstock'
+15:42:19 [INFO] [11/30] Đang xử lý VIC ...
+15:42:19 [WARNING] Không lấy được chỉ số tài chính quarter của VIC: No module named 'vnstock'
+15:42:19 [WARNING] Không lấy được chỉ số tài chính year của VIC: No module named 'vnstock'
+15:42:20 [INFO] [12/30] Đang xử lý VHM ...
+15:42:20 [WARNING] Không lấy được chỉ số tài chính quarter của VHM: No module named 'vnstock'
+15:42:20 [WARNING] Không lấy được chỉ số tài chính year của VHM: No module named 'vnstock'
+15:42:21 [INFO] [13/30] Đang xử lý KDH ...
+15:42:21 [WARNING] Không lấy được chỉ số tài chính quarter của KDH: No module named 'vnstock'
+15:42:21 [WARNING] Không lấy được chỉ số tài chính year của KDH: No module named 'vnstock'
+15:42:22 [INFO] [14/30] Đang xử lý NLG ...
+15:42:23 [WARNING] Không lấy được chỉ số tài chính quarter của NLG: No module named 'vnstock'
+15:42:23 [WARNING] Không lấy được chỉ số tài chính year của NLG: No module named 'vnstock'
+15:42:23 [INFO] [15/30] Đang xử lý HPG ...
+15:42:24 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+15:42:24 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+15:42:24 [INFO] [16/30] Đang xử lý HSG ...
+15:42:25 [WARNING] Không lấy được chỉ số tài chính quarter của HSG: No module named 'vnstock'
+15:42:25 [WARNING] Không lấy được chỉ số tài chính year của HSG: No module named 'vnstock'
+15:42:25 [INFO] [17/30] Đang xử lý NKG ...
+15:42:25 [WARNING] Không lấy được chỉ số tài chính quarter của NKG: No module named 'vnstock'
+15:42:25 [WARNING] Không lấy được chỉ số tài chính year của NKG: No module named 'vnstock'
+15:42:26 [INFO] [18/30] Đang xử lý MWG ...
+15:42:26 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+15:42:26 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+15:42:27 [INFO] [19/30] Đang xử lý FRT ...
+15:42:27 [WARNING] Không lấy được chỉ số tài chính quarter của FRT: No module named 'vnstock'
+15:42:27 [WARNING] Không lấy được chỉ số tài chính year của FRT: No module named 'vnstock'
+15:42:27 [INFO] [20/30] Đang xử lý PNJ ...
+15:42:28 [WARNING] Không lấy được chỉ số tài chính quarter của PNJ: No module named 'vnstock'
+15:42:28 [WARNING] Không lấy được chỉ số tài chính year của PNJ: No module named 'vnstock'
+15:42:28 [INFO] [21/30] Đang xử lý FPT ...
+15:42:28 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+15:42:28 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+15:42:29 [INFO] [22/30] Đang xử lý CMG ...
+15:42:29 [WARNING] Không lấy được chỉ số tài chính quarter của CMG: No module named 'vnstock'
+15:42:29 [WARNING] Không lấy được chỉ số tài chính year của CMG: No module named 'vnstock'
+15:42:29 [INFO] [23/30] Đang xử lý VNM ...
+15:42:30 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+15:42:30 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+15:42:30 [INFO] [24/30] Đang xử lý MSN ...
+15:42:30 [WARNING] Không lấy được chỉ số tài chính quarter của MSN: No module named 'vnstock'
+15:42:30 [WARNING] Không lấy được chỉ số tài chính year của MSN: No module named 'vnstock'
+15:42:31 [INFO] [25/30] Đang xử lý SAB ...
+15:42:31 [WARNING] Không lấy được chỉ số tài chính quarter của SAB: No module named 'vnstock'
+15:42:31 [WARNING] Không lấy được chỉ số tài chính year của SAB: No module named 'vnstock'
+15:42:31 [INFO] [26/30] Đang xử lý GAS ...
+15:42:32 [WARNING] Không lấy được chỉ số tài chính quarter của GAS: No module named 'vnstock'
+15:42:32 [WARNING] Không lấy được chỉ số tài chính year của GAS: No module named 'vnstock'
+15:42:32 [INFO] [27/30] Đang xử lý PLX ...
+15:42:32 [WARNING] Không lấy được chỉ số tài chính quarter của PLX: No module named 'vnstock'
+15:42:32 [WARNING] Không lấy được chỉ số tài chính year của PLX: No module named 'vnstock'
+15:42:33 [INFO] [28/30] Đang xử lý POW ...
+15:42:33 [WARNING] Không lấy được chỉ số tài chính quarter của POW: No module named 'vnstock'
+15:42:33 [WARNING] Không lấy được chỉ số tài chính year của POW: No module named 'vnstock'
+15:42:33 [INFO] [29/30] Đang xử lý GMD ...
+15:42:34 [WARNING] Không lấy được chỉ số tài chính quarter của GMD: No module named 'vnstock'
+15:42:34 [WARNING] Không lấy được chỉ số tài chính year của GMD: No module named 'vnstock'
+15:42:34 [INFO] [30/30] Đang xử lý REE ...
+15:42:34 [WARNING] Không lấy được chỉ số tài chính quarter của REE: No module named 'vnstock'
+15:42:34 [WARNING] Không lấy được chỉ số tài chính year của REE: No module named 'vnstock'
+15:44:20 [INFO] Chưa gắn API Key DNSE -> chuyển sang chế độ dữ liệu công khai.
+15:44:20 [INFO] [1/30] Đang xử lý VCB ...
+15:44:20 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+15:44:20 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+15:44:21 [INFO] [2/30] Đang xử lý BID ...
+15:44:21 [WARNING] Không lấy được chỉ số tài chính quarter của BID: No module named 'vnstock'
+15:44:21 [WARNING] Không lấy được chỉ số tài chính year của BID: No module named 'vnstock'
+15:44:22 [INFO] [3/30] Đang xử lý CTG ...
+15:44:22 [WARNING] Không lấy được chỉ số tài chính quarter của CTG: No module named 'vnstock'
+15:44:22 [WARNING] Không lấy được chỉ số tài chính year của CTG: No module named 'vnstock'
+15:44:22 [INFO] [4/30] Đang xử lý TCB ...
+15:44:23 [WARNING] Không lấy được chỉ số tài chính quarter của TCB: No module named 'vnstock'
+15:44:23 [WARNING] Không lấy được chỉ số tài chính year của TCB: No module named 'vnstock'
+15:44:23 [INFO] [5/30] Đang xử lý MBB ...
+15:44:23 [WARNING] Không lấy được chỉ số tài chính quarter của MBB: No module named 'vnstock'
+15:44:23 [WARNING] Không lấy được chỉ số tài chính year của MBB: No module named 'vnstock'
+15:44:24 [INFO] [6/30] Đang xử lý ACB ...
+15:44:24 [WARNING] Không lấy được chỉ số tài chính quarter của ACB: No module named 'vnstock'
+15:44:24 [WARNING] Không lấy được chỉ số tài chính year của ACB: No module named 'vnstock'
+15:44:25 [INFO] [7/30] Đang xử lý SSI ...
+15:44:25 [WARNING] Không lấy được chỉ số tài chính quarter của SSI: No module named 'vnstock'
+15:44:25 [WARNING] Không lấy được chỉ số tài chính year của SSI: No module named 'vnstock'
+15:44:25 [INFO] [8/30] Đang xử lý VCI ...
+15:44:26 [WARNING] Không lấy được chỉ số tài chính quarter của VCI: No module named 'vnstock'
+15:44:26 [WARNING] Không lấy được chỉ số tài chính year của VCI: No module named 'vnstock'
+15:44:26 [INFO] [9/30] Đang xử lý HCM ...
+15:44:26 [WARNING] Không lấy được chỉ số tài chính quarter của HCM: No module named 'vnstock'
+15:44:26 [WARNING] Không lấy được chỉ số tài chính year của HCM: No module named 'vnstock'
+15:44:27 [INFO] [10/30] Đang xử lý VND ...
+15:44:27 [WARNING] Không lấy được chỉ số tài chính quarter của VND: No module named 'vnstock'
+15:44:27 [WARNING] Không lấy được chỉ số tài chính year của VND: No module named 'vnstock'
+15:44:28 [INFO] [11/30] Đang xử lý VIC ...
+15:44:28 [WARNING] Không lấy được chỉ số tài chính quarter của VIC: No module named 'vnstock'
+15:44:28 [WARNING] Không lấy được chỉ số tài chính year của VIC: No module named 'vnstock'
+15:44:28 [INFO] [12/30] Đang xử lý VHM ...
+15:44:29 [WARNING] Không lấy được chỉ số tài chính quarter của VHM: No module named 'vnstock'
+15:44:29 [WARNING] Không lấy được chỉ số tài chính year của VHM: No module named 'vnstock'
+15:44:30 [INFO] [13/30] Đang xử lý KDH ...
+15:44:30 [WARNING] Không lấy được chỉ số tài chính quarter của KDH: No module named 'vnstock'
+15:44:30 [WARNING] Không lấy được chỉ số tài chính year của KDH: No module named 'vnstock'
+15:44:31 [INFO] [14/30] Đang xử lý NLG ...
+15:44:31 [WARNING] Không lấy được chỉ số tài chính quarter của NLG: No module named 'vnstock'
+15:44:31 [WARNING] Không lấy được chỉ số tài chính year của NLG: No module named 'vnstock'
+15:44:31 [INFO] [15/30] Đang xử lý HPG ...
+15:44:31 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+15:44:31 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+15:44:32 [INFO] [16/30] Đang xử lý HSG ...
+15:44:32 [WARNING] Không lấy được chỉ số tài chính quarter của HSG: No module named 'vnstock'
+15:44:32 [WARNING] Không lấy được chỉ số tài chính year của HSG: No module named 'vnstock'
+15:44:33 [INFO] [17/30] Đang xử lý NKG ...
+15:44:33 [WARNING] Không lấy được chỉ số tài chính quarter của NKG: No module named 'vnstock'
+15:44:33 [WARNING] Không lấy được chỉ số tài chính year của NKG: No module named 'vnstock'
+15:44:33 [INFO] [18/30] Đang xử lý MWG ...
+15:44:33 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+15:44:33 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+15:44:34 [INFO] [19/30] Đang xử lý FRT ...
+15:44:34 [WARNING] Không lấy được chỉ số tài chính quarter của FRT: No module named 'vnstock'
+15:44:34 [WARNING] Không lấy được chỉ số tài chính year của FRT: No module named 'vnstock'
+15:44:35 [INFO] [20/30] Đang xử lý PNJ ...
+15:44:35 [WARNING] Không lấy được chỉ số tài chính quarter của PNJ: No module named 'vnstock'
+15:44:35 [WARNING] Không lấy được chỉ số tài chính year của PNJ: No module named 'vnstock'
+15:44:35 [INFO] [21/30] Đang xử lý FPT ...
+15:44:36 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+15:44:36 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+15:44:36 [INFO] [22/30] Đang xử lý CMG ...
+15:44:36 [WARNING] Không lấy được chỉ số tài chính quarter của CMG: No module named 'vnstock'
+15:44:36 [WARNING] Không lấy được chỉ số tài chính year của CMG: No module named 'vnstock'
+15:44:37 [INFO] [23/30] Đang xử lý VNM ...
+15:44:37 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+15:44:37 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+15:44:37 [INFO] [24/30] Đang xử lý MSN ...
+15:44:38 [WARNING] Không lấy được chỉ số tài chính quarter của MSN: No module named 'vnstock'
+15:44:38 [WARNING] Không lấy được chỉ số tài chính year của MSN: No module named 'vnstock'
+15:44:38 [INFO] [25/30] Đang xử lý SAB ...
+15:44:38 [WARNING] Không lấy được chỉ số tài chính quarter của SAB: No module named 'vnstock'
+15:44:38 [WARNING] Không lấy được chỉ số tài chính year của SAB: No module named 'vnstock'
+15:44:39 [INFO] [26/30] Đang xử lý GAS ...
+15:44:39 [WARNING] Không lấy được chỉ số tài chính quarter của GAS: No module named 'vnstock'
+15:44:39 [WARNING] Không lấy được chỉ số tài chính year của GAS: No module named 'vnstock'
+15:44:39 [INFO] [27/30] Đang xử lý PLX ...
+15:44:40 [WARNING] Không lấy được chỉ số tài chính quarter của PLX: No module named 'vnstock'
+15:44:40 [WARNING] Không lấy được chỉ số tài chính year của PLX: No module named 'vnstock'
+15:44:40 [INFO] [28/30] Đang xử lý POW ...
+15:44:40 [WARNING] Không lấy được chỉ số tài chính quarter của POW: No module named 'vnstock'
+15:44:40 [WARNING] Không lấy được chỉ số tài chính year của POW: No module named 'vnstock'
+15:44:41 [INFO] [29/30] Đang xử lý GMD ...
+15:44:41 [WARNING] Không lấy được chỉ số tài chính quarter của GMD: No module named 'vnstock'
+15:44:41 [WARNING] Không lấy được chỉ số tài chính year của GMD: No module named 'vnstock'
+15:44:41 [INFO] [30/30] Đang xử lý REE ...
+15:44:42 [WARNING] Không lấy được chỉ số tài chính quarter của REE: No module named 'vnstock'
+15:44:42 [WARNING] Không lấy được chỉ số tài chính year của REE: No module named 'vnstock'
+15:51:16 [INFO] Chưa gắn API Key DNSE -> chuyển sang chế độ dữ liệu công khai.
+15:51:16 [INFO] [1/30] Đang xử lý VCB ...
+15:51:17 [WARNING] Không lấy được chỉ số tài chính quarter của VCB: No module named 'vnstock'
+15:51:17 [WARNING] Không lấy được chỉ số tài chính year của VCB: No module named 'vnstock'
+15:51:17 [INFO] [2/30] Đang xử lý BID ...
+15:51:18 [WARNING] Không lấy được chỉ số tài chính quarter của BID: No module named 'vnstock'
+15:51:18 [WARNING] Không lấy được chỉ số tài chính year của BID: No module named 'vnstock'
+15:51:18 [INFO] [3/30] Đang xử lý CTG ...
+15:51:19 [WARNING] Không lấy được chỉ số tài chính quarter của CTG: No module named 'vnstock'
+15:51:19 [WARNING] Không lấy được chỉ số tài chính year của CTG: No module named 'vnstock'
+15:51:19 [INFO] [4/30] Đang xử lý TCB ...
+15:51:19 [WARNING] Không lấy được chỉ số tài chính quarter của TCB: No module named 'vnstock'
+15:51:19 [WARNING] Không lấy được chỉ số tài chính year của TCB: No module named 'vnstock'
+15:51:20 [INFO] [5/30] Đang xử lý MBB ...
+15:51:20 [WARNING] Không lấy được chỉ số tài chính quarter của MBB: No module named 'vnstock'
+15:51:20 [WARNING] Không lấy được chỉ số tài chính year của MBB: No module named 'vnstock'
+15:51:21 [INFO] [6/30] Đang xử lý ACB ...
+15:51:21 [WARNING] Không lấy được chỉ số tài chính quarter của ACB: No module named 'vnstock'
+15:51:21 [WARNING] Không lấy được chỉ số tài chính year của ACB: No module named 'vnstock'
+15:51:21 [INFO] [7/30] Đang xử lý SSI ...
+15:51:21 [WARNING] Không lấy được chỉ số tài chính quarter của SSI: No module named 'vnstock'
+15:51:21 [WARNING] Không lấy được chỉ số tài chính year của SSI: No module named 'vnstock'
+15:51:22 [INFO] [8/30] Đang xử lý VCI ...
+15:51:22 [WARNING] Không lấy được chỉ số tài chính quarter của VCI: No module named 'vnstock'
+15:51:22 [WARNING] Không lấy được chỉ số tài chính year của VCI: No module named 'vnstock'
+15:51:23 [INFO] [9/30] Đang xử lý HCM ...
+15:51:23 [WARNING] Không lấy được chỉ số tài chính quarter của HCM: No module named 'vnstock'
+15:51:23 [WARNING] Không lấy được chỉ số tài chính year của HCM: No module named 'vnstock'
+15:51:23 [INFO] [10/30] Đang xử lý VND ...
+15:51:23 [WARNING] Không lấy được chỉ số tài chính quarter của VND: No module named 'vnstock'
+15:51:23 [WARNING] Không lấy được chỉ số tài chính year của VND: No module named 'vnstock'
+15:51:24 [INFO] [11/30] Đang xử lý VIC ...
+15:51:24 [WARNING] Không lấy được chỉ số tài chính quarter của VIC: No module named 'vnstock'
+15:51:24 [WARNING] Không lấy được chỉ số tài chính year của VIC: No module named 'vnstock'
+15:51:25 [INFO] [12/30] Đang xử lý VHM ...
+15:51:25 [WARNING] Không lấy được chỉ số tài chính quarter của VHM: No module named 'vnstock'
+15:51:25 [WARNING] Không lấy được chỉ số tài chính year của VHM: No module named 'vnstock'
+15:51:25 [INFO] [13/30] Đang xử lý KDH ...
+15:51:26 [WARNING] Không lấy được chỉ số tài chính quarter của KDH: No module named 'vnstock'
+15:51:26 [WARNING] Không lấy được chỉ số tài chính year của KDH: No module named 'vnstock'
+15:51:26 [INFO] [14/30] Đang xử lý NLG ...
+15:51:26 [WARNING] Không lấy được chỉ số tài chính quarter của NLG: No module named 'vnstock'
+15:51:26 [WARNING] Không lấy được chỉ số tài chính year của NLG: No module named 'vnstock'
+15:51:27 [INFO] [15/30] Đang xử lý HPG ...
+15:51:27 [WARNING] Không lấy được chỉ số tài chính quarter của HPG: No module named 'vnstock'
+15:51:27 [WARNING] Không lấy được chỉ số tài chính year của HPG: No module named 'vnstock'
+15:51:27 [INFO] [16/30] Đang xử lý HSG ...
+15:51:28 [WARNING] Không lấy được chỉ số tài chính quarter của HSG: No module named 'vnstock'
+15:51:28 [WARNING] Không lấy được chỉ số tài chính year của HSG: No module named 'vnstock'
+15:51:28 [INFO] [17/30] Đang xử lý NKG ...
+15:51:28 [WARNING] Không lấy được chỉ số tài chính quarter của NKG: No module named 'vnstock'
+15:51:28 [WARNING] Không lấy được chỉ số tài chính year của NKG: No module named 'vnstock'
+15:51:29 [INFO] [18/30] Đang xử lý MWG ...
+15:51:29 [WARNING] Không lấy được chỉ số tài chính quarter của MWG: No module named 'vnstock'
+15:51:29 [WARNING] Không lấy được chỉ số tài chính year của MWG: No module named 'vnstock'
+15:51:30 [INFO] [19/30] Đang xử lý FRT ...
+15:51:30 [WARNING] Không lấy được chỉ số tài chính quarter của FRT: No module named 'vnstock'
+15:51:30 [WARNING] Không lấy được chỉ số tài chính year của FRT: No module named 'vnstock'
+15:51:30 [INFO] [20/30] Đang xử lý PNJ ...
+15:51:30 [WARNING] Không lấy được chỉ số tài chính quarter của PNJ: No module named 'vnstock'
+15:51:30 [WARNING] Không lấy được chỉ số tài chính year của PNJ: No module named 'vnstock'
+15:51:31 [INFO] [21/30] Đang xử lý FPT ...
+15:51:31 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+15:51:31 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+15:51:32 [INFO] [22/30] Đang xử lý CMG ...
+15:51:32 [WARNING] Không lấy được chỉ số tài chính quarter của CMG: No module named 'vnstock'
+15:51:32 [WARNING] Không lấy được chỉ số tài chính year của CMG: No module named 'vnstock'
+15:51:32 [INFO] [23/30] Đang xử lý VNM ...
+15:51:33 [WARNING] Không lấy được chỉ số tài chính quarter của VNM: No module named 'vnstock'
+15:51:33 [WARNING] Không lấy được chỉ số tài chính year của VNM: No module named 'vnstock'
+15:51:33 [INFO] [24/30] Đang xử lý MSN ...
+15:51:33 [WARNING] Không lấy được chỉ số tài chính quarter của MSN: No module named 'vnstock'
+15:51:33 [WARNING] Không lấy được chỉ số tài chính year của MSN: No module named 'vnstock'
+15:51:34 [INFO] [25/30] Đang xử lý SAB ...
+15:51:34 [WARNING] Không lấy được chỉ số tài chính quarter của SAB: No module named 'vnstock'
+15:51:34 [WARNING] Không lấy được chỉ số tài chính year của SAB: No module named 'vnstock'
+15:51:34 [INFO] [26/30] Đang xử lý GAS ...
+15:51:35 [WARNING] Không lấy được chỉ số tài chính quarter của GAS: No module named 'vnstock'
+15:51:35 [WARNING] Không lấy được chỉ số tài chính year của GAS: No module named 'vnstock'
+15:51:35 [INFO] [27/30] Đang xử lý PLX ...
+15:51:35 [WARNING] Không lấy được chỉ số tài chính quarter của PLX: No module named 'vnstock'
+15:51:35 [WARNING] Không lấy được chỉ số tài chính year của PLX: No module named 'vnstock'
+15:51:36 [INFO] [28/30] Đang xử lý POW ...
+15:51:36 [WARNING] Không lấy được chỉ số tài chính quarter của POW: No module named 'vnstock'
+15:51:36 [WARNING] Không lấy được chỉ số tài chính year của POW: No module named 'vnstock'
+15:51:36 [INFO] [29/30] Đang xử lý GMD ...
+15:51:37 [WARNING] Không lấy được chỉ số tài chính quarter của GMD: No module named 'vnstock'
+15:51:37 [WARNING] Không lấy được chỉ số tài chính year của GMD: No module named 'vnstock'
+15:51:37 [INFO] [30/30] Đang xử lý REE ...
+15:51:37 [WARNING] Không lấy được chỉ số tài chính quarter của REE: No module named 'vnstock'
+15:51:37 [WARNING] Không lấy được chỉ số tài chính year của REE: No module named 'vnstock'
+16:21:31 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+16:21:31 [INFO] [1/1] Đang xử lý FPT ...
+16:21:31 [WARNING] Không lấy được chỉ số tài chính quarter của FPT: No module named 'vnstock'
+16:21:31 [WARNING] Không lấy được chỉ số tài chính year của FPT: No module named 'vnstock'
+16:35:19 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+16:35:19 [INFO] [1/1] Đang xử lý FPT ...
+16:35:21 [INFO] Device registered: 24c50628097d77039834070507d0c323 (version 0.0.1)
+16:35:28 [INFO] Loaded 162 built-in KBS field mappings
+16:35:28 [INFO] Loaded 162 built-in KBS field mappings
+16:35:30 [INFO] Loaded 162 built-in KBS field mappings
+16:35:30 [INFO] Loaded 162 built-in KBS field mappings
+16:43:53 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+16:43:53 [INFO] [1/1] Đang xử lý FPT ...
+16:43:56 [INFO] Loaded 162 built-in KBS field mappings
+16:43:56 [INFO] Loaded 162 built-in KBS field mappings
+16:43:57 [INFO] Loaded 162 built-in KBS field mappings
+16:43:57 [INFO] Loaded 162 built-in KBS field mappings
+18:15:49 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+18:15:49 [INFO] [1/1] Đang xử lý FPT ...
+18:15:52 [INFO] Loaded 162 built-in KBS field mappings
+18:15:52 [INFO] Loaded 162 built-in KBS field mappings
+18:15:54 [INFO] Loaded 162 built-in KBS field mappings
+18:15:54 [INFO] Loaded 162 built-in KBS field mappings
+18:16:10 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+18:16:10 [INFO] [1/1] Đang xử lý FPT ...
+18:16:47 [INFO] Loaded 162 built-in KBS field mappings
+18:16:47 [INFO] Loaded 162 built-in KBS field mappings
+18:16:49 [INFO] Loaded 162 built-in KBS field mappings
+18:16:49 [INFO] Loaded 162 built-in KBS field mappings
+18:45:18 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+18:45:18 [INFO] [1/1] Đang xử lý FPT ...
+18:45:21 [INFO] Loaded 162 built-in KBS field mappings
+18:45:21 [INFO] Loaded 162 built-in KBS field mappings
+18:45:23 [INFO] Loaded 162 built-in KBS field mappings
+18:45:23 [INFO] Loaded 162 built-in KBS field mappings
+18:46:15 [INFO] Loaded 162 built-in KBS field mappings
+18:46:15 [INFO] Loaded 162 built-in KBS field mappings
+18:50:26 [INFO] Loaded 162 built-in KBS field mappings
+18:50:26 [INFO] Loaded 162 built-in KBS field mappings
+18:50:27 [INFO] Loaded 162 built-in KBS field mappings
+18:50:27 [INFO] Loaded 162 built-in KBS field mappings
+18:55:05 [WARNING] Xác thực DNSE thất bại (404 Client Error: Not Found for url: https://services.entrade.com.vn/dnse-auth-service/v1/login) -> chuyển sang chế độ công khai.
+18:55:05 [INFO] [1/1] Đang xử lý FPT ...
+18:55:09 [INFO] Loaded 162 built-in KBS field mappings
+18:55:09 [INFO] Loaded 162 built-in KBS field mappings
+18:55:11 [INFO] Loaded 162 built-in KBS field mappings
+18:55:11 [INFO] Loaded 162 built-in KBS field mappings
+18:58:46 [INFO] Loaded 162 built-in KBS field mappings
+18:58:46 [INFO] Loaded 162 built-in KBS field mappings
+18:58:46 [ERROR] Error fetching ratio: Finance.ratio() got an unexpected keyword argument 'lang'
+18:58:53 [ERROR] Error fetching income_statement: Finance.income_statement() got an unexpected keyword argument 'lang'
+19:03:01 [INFO] Not a stock. Company and finance data unavailable.
+20:33:06 [INFO] Not a stock. Company and finance data unavailable.
