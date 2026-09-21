@@ -16,8 +16,8 @@ log = logging.getLogger("api")
 # CẤU HÌNH
 # ==============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DNSE_API_KEY = os.getenv("DNSE_API_KEY", "eyJvcmciOiJkbnNlIiwiaWQiOiJjOTc3YTAxYjkwNDc0MjJmYTQ3NDc1NGI1NjQ3MTRhYiIsImgiOiJtdXJtdXIxMjgifQ==")
-DNSE_SECRET_KEY = os.getenv("DNSE_SECRET_KEY", "-htWypmlDcQYouE3QO5wFtgUvrcEKXz2Gnx65PJhrEPRc_4gsqPZQDAZSJvlTzYfg5q8FiV7qKlMsi8uOYhukA")
+DNSE_API_KEY = os.getenv("DNSE_API_KEY", "")
+DNSE_SECRET_KEY = os.getenv("DNSE_SECRET_KEY", "")
 URL_DNSE_AUTH = "https://services.entrade.com.vn/dnse-auth-service/v1/login"          # CHƯA xác minh
 URL_DNSE_CHART_STOCK = (                                                              # CHƯA xác minh, thử lần lượt
     "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
