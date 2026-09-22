@@ -1,5 +1,4 @@
-# Stock Data Pipeline and Layer 2 Filter
-
+# TELEGRAM BOT CHỨNG KHOÁN
 Repository này hiện gồm hai phần Python độc lập:
 
 - `DNSE.py`: lấy, làm sạch và chuẩn hóa dữ liệu giá cùng chỉ số tài chính.
