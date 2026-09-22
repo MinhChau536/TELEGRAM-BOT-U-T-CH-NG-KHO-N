@@ -1,0 +1,20 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+subscribers.json
+
+# Generated data and local databases
+*.db
+*.sqlite
+*.sqlite3
+output/
+
+# Imported/exported snapshots should stay outside the source tree
+Code xử lí data đầu vào -20260921T154950Z-1-001/

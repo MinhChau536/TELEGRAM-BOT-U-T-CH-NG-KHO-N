@@ -1,0 +1,4633 @@
+﻿===== DNSE.py =====
+from __future__ import annotations
+
+import logging
+import os
+import re
+import time
+import unicodedata
+from datetime import date, datetime, timedelta, timezone
+
+import pandas as pd
+import requests
+
+log = logging.getLogger("api")
+
+# ==============================================================================
+# CẤU HÌNH
+# ==============================================================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DNSE_API_KEY = os.getenv("DNSE_API_KEY", "")
+DNSE_SECRET_KEY = os.getenv("DNSE_SECRET_KEY", "")
+URL_DNSE_AUTH = "https://services.entrade.com.vn/dnse-auth-service/v1/login"          # CHƯA xác minh
+URL_DNSE_CHART_STOCK = (                                                              # CHƯA xác minh, thử lần lượt
+    "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
+    "https://services.entrade.com.vn/chart-api/v2/ohlcs",
+)
+URL_DNSE_CHART_INDEX = ("https://services.entrade.com.vn/chart-api/v2/ohlcs/index",)  # CHƯA xác minh
+
+# >>> ĐƯỜNG DẪN CSV BCTC DỰ PHÒNG: bù kỳ / chỉ số mà vnstock thiếu <<<
+FINANCIAL_CSV_PATH = os.getenv(
+    "FINANCIAL_CSV_PATH",
+    os.path.join(BASE_DIR, "Filedata.csv"),
+)
+
+INDEX_SYMBOLS = {"VNINDEX", "VN30", "HNXINDEX", "HNX30", "UPCOMINDEX"}   # mã chỉ số (không nhân PRICE_MULTIPLIER)
+DEFAULT_INDEXES = ["VNINDEX"]
+
+DEFAULT_SYMBOLS = [
+    # --- 1. Ngân hàng (22 mã) ---
+    "VCB", "BID", "CTG", "TCB", "MBB", "ACB", "VPB", "STB", "HDB", "TPB",
+    "LPB", "SHB", "MSB", "VIB", "EIB", "SSB", "OCB", "BAB", "ABB", "NAB",
+    "SGB", "BVB",
+
+    # --- 2. Chứng khoán (23 mã) ---
+    "SSI", "VCI", "HCM", "VND", "MBS", "SHS", "FTS", "CTS", "BSI", "AGR",
+    "ORS", "VDS", "BVS", "IVS", "TCI", "VIX", "SBS", "TVB", "PSI", "WSS",
+    "APG", "EIV", "HBS",
+
+    # --- 3. Bất động sản Dân dụng & Khu công nghiệp (45 mã) ---
+    "VIC", "VHM", "VRE", "NVL", "KDH", "NLG", "PDR", "DXG", "DIG", "CEO",
+    "KBC", "IDC", "SZC", "ITA", "SIP", "LHGP", "BCM", "TCH", "HDG", "NTH",
+    "CRE", "KHG", "DXS", "HQC", "SCR", "LDG", "CIIC", "NBB", "IJC", "AGG",
+    "HDC", "D2D", "NTC", "TIP", "VRG", "DRH", "SJS", "L14", "VC3", "IDV",
+    "DTG", "TDH", "ITC", "STL", "CCL",
+
+    # --- 4. Thép, Vật liệu xây dựng & Hóa chất (30 mã) ---
+    "HPG", "HSG", "NKG", "SMC", "TLH", "POM", "VGS", "DGC", "DCM", "DPM",
+    "CSV", "BFC", "LAS", "PLC", "HT1", "BCC", "BMP", "NTP", "DPR", "PHR",
+    "GVR", "DRI", "TNC", "VIS", "HLA", "KHB", "HOM", "C32", "DHA", "LBM",
+
+    # --- 5. Bán lẻ, Tiêu dùng, Nông nghiệp & Đồ uống (35 mã) ---
+    "MWG", "FRT", "PNJ", "MSN", "VNM", "SAB", "BHN", "DGW", "HAX", "PET",
+    "KDC", "MCH", "QNS", "TLG", "DBC", "BAF", "HNG", "HAG", "PAN", "LTG",
+    "VCF", "SBT", "SLS", "LSS", "MCM", "CLM", "TAR", "BFN", "BBC", "NAF",
+    "VHE", "TSC", "SJ1", "APF", "LIX",
+
+    # --- 6. Công nghệ, Viễn thông & Vận tải, Logistics, Cảng biển (35 mã) ---
+    "FPT", "CMG", "ELC", "CTR", "FOX", "VGI", "SGP", "GMD", "HAH", "VSC",
+    "VJC", "HVN", "AST", "ACV", "TMS", "ILB", "SFI", "SAD", "PVT", "PVP",
+    "VIP", "VTO", "SCT", "PDN", "CLL", "TCO", "PJT", "ITD", "SAM", "TTN",
+    "VTC", "SGT", "SRT", "HRT", "TTV",
+
+    # --- 7. Dầu khí, Năng lượng, Điện & Nước (35 mã) ---
+    "GAS", "PLX", "POW", "PVD", "PVS", "PVC", "PVB", "BSR", "OIL", "REE",
+    "PC1", "GEG", "TTA", "NT2", "QTP", "HND", "SJD", "VSH", "SNC", "PGD",
+    "CNG", "ASP", "PGS", "PVG", "TV4", "TBC", "VPD", "SJD", "SEB", "NED",
+    "BTP", "PPA", "DNW", "TDW", "TDM",
+
+    # --- 8. Dệt may, Thủy sản, Gỗ & Cao su tự nhiên (30 mã) ---
+    "VHC", "ANV", "IDI", "FMC", "MPC", "CMX", "TNG", "MSH", "STK", "GIL",
+    "TTC", "GDT", "VGT", "TCM", "VTK", "ADS", "MDT", "HTG", "AAM", "ACL",
+    "BLF", "SSN", "PTB", "TTF", "GTA", "ACG", "TRC", "RTB", "HRC", "DRI",
+
+    # --- 9. Xây dựng, Đầu tư công & Hạ tầng (30 mã) ---
+    "VCG", "HHV", "C4G", "FCN", "LCG", "CTD", "HBC", "DCN", "DTI", "KSB",
+    "SCN", "G36", "TV2", "HID", "EVG", "HUB", "LIG", "VNE", "TBD", "TCD",
+    "BOT", "C92", "PNE", "KPF", "S99", "SCI", "HDA", "PXI", "PXS", "L40",
+
+    # --- 10. Dược phẩm, Y tế & Khác (15 mã) ---
+    "DHG", "IMP", "TRA", "DBD", "DMC", "DCL", "PMC", "AMV", "JVC", "FIT",
+    "RAL", "VMD", "LDP", "SPM", "DP3"
+]
+TIMEOUT, MAX_RETRIES, RETRY_DELAY, REQUEST_PAUSE = 15, 3, 1.5, 3.5
+COLLECT_RESOLUTION = "15"        # nến 15 phút (quyết định của nhóm)
+CANDLE_CLOSE_DELAY = 20          # giây chờ sau khi nến đóng rồi mới gọi API
+WARMUP_DAYS = 7                  # số ngày tải lùi cho EMA50, RSI14, ATR14...
+TOKEN_REFRESH_SECONDS = 4 * 3600
+BAR_TIME_IS_START = True         # CHƯA xác minh: 't' của DNSE là giờ BẮT ĐẦU nến. Nếu là giờ kết thúc -> False
+PRICE_MULTIPLIER = {"DNSE": 1, "VNSTOCK": 1}   # đặt 1000 nếu nguồn trả giá theo nghìn đồng; 2 nguồn phải CÙNG đơn vị
+MAX_FINANCE_PERIODS = 10
+VNSTOCK_CALL_INTERVAL = 3.5      # giãn cách tối thiểu giữa các lần gọi vnstock để không dính rate limit 20 req/phút
+VNSTOCK_RETRIES = 3
+
+VN_TZ = timezone(timedelta(hours=7))
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"}
+BAR_SECONDS = {"1": 60, "5": 300, "15": 900, "30": 1800, "1H": 3600, "1D": 86400, "1W": 604800}
+VNSTOCK_INTERVALS = {"1": "1m", "5": "5m", "15": "15m", "30": "30m", "1H": "1H", "1D": "1D", "1W": "1W"}
+
+# ---- Format CHUẨN ----
+PRICE_COLUMNS = ["symbol", "resolution", "time", "open", "high", "low", "close", "volume", "source"]
+METRICS = ["roe", "roa", "eps", "pe", "pb", "net_margin", "debt_to_equity", "profit_after_tax"]
+FIN_COLUMNS = ["symbol", "period_type", "period", *METRICS, "status", "source"]
+METRIC_DIGITS = {"roe": 4, "roa": 4, "eps": 2, "pe": 2, "pb": 2,
+                 "net_margin": 4, "debt_to_equity": 4, "profit_after_tax": 2}
+KNOWN_SOURCES = {"DNSE", "VNSTOCK", "vnstock", "csv", "vnstock+csv", "none"}
+
+METRIC_ALIASES = {
+    "roe": ("roe", "returnonequity", "tss"),
+    "roa": ("roa", "returnonassets", "tst"),
+    "eps": (
+        "eps", "epsvnd", "earningpershare", "earningspershare", "basiceps",
+        "laicobantrencophieu", "laicobantrencophieuvnd", "lãi cơ bản trên cổ phiếu",
+        "lailotrencophieu", "lailocobantrencophieu", "lailotrencohieu"
+    ),
+    "pe": ("pe", "peratio", "pricetoearning", "giaquacophieu", "priceearningsratio"),
+    "pb": ("pb", "pbratio", "pricetobook", "giatrongso"),
+    "net_margin": (
+        "aftertaxprofitmargin", "aftertaxmargin", "netmargin", "netprofitmargin",
+        "bienlnsauthue", "bienlnrong", "profitmargin", "loinhuansauthuetrencdoanhthu",
+        "loinhuansauthuetrenndoanhthu", "loinhuansauthue", "loinhuansauthuenetrong", "loinhuanrong",
+        "after_tax_margin"
+    ),
+    "debt_to_equity": ("debttoequity", "notrenvonchu", "debtperequity", "debtequity", "novonchu", "nợvốnchu"),
+    "profit_after_tax": (
+        "aftertaxprofit", "aftertaxnetprofit", "netprofitaftertax", "profitaftertax", "netincome",
+        "netincomeaftertax", "profitaftertaxvnd", "loinhuansauthue", "loinhuansauthuevnd",
+        "lailothuansauthue", "lailothuansauthuevnd", "loinhuansauthue", "lailoaftertax",
+        "earningsaftertax", "incomeaftertax", "ketquasauthue", "loinhuansauthu"
+    ),
+}
+YEAR_KEYS, QUARTER_KEYS, PERIOD_KEYS = ("year", "nam", "yearreport"), ("quarter", "quy", "lengthreport", "quarterreport"), ("period", "reportperiod", "kybaocao")
+TICKER_KEYS = ("ticker", "symbol", "ma")
+
+
+def setup_logging(level: int = logging.INFO) -> None:
+    logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S", force=True)
+
+
+# ==============================================================================
+# HÀM DÙNG CHUNG
+# ==============================================================================
+_last_request_ts = 0.0
+
+
+def _rate_limit_sleep(min_gap: float = REQUEST_PAUSE) -> None:
+    """Giữ khoảng nghỉ tối thiểu giữa các request, không làm ảnh hưởng lịch thu thập 15 phút."""
+    global _last_request_ts
+    now = time.monotonic()
+    if _last_request_ts:
+        wait = min_gap - (now - _last_request_ts)
+        if wait > 0:
+            time.sleep(wait)
+    _last_request_ts = time.monotonic()
+
+
+def validate_symbol(symbol: str) -> str:
+    symbol = str(symbol).upper().strip()
+    if not re.fullmatch(r"[A-Z0-9]{3,10}", symbol):
+        raise ValueError(f"Mã không hợp lệ: '{symbol}'")
+    return symbol
+
+
+def _norm(text) -> str:
+    text = unicodedata.normalize("NFD", str(text).replace("đ", "d").replace("Đ", "D"))
+    return re.sub(r"[^a-z0-9]", "", "".join(c for c in text if unicodedata.category(c) != "Mn").lower())
+
+
+def _get_json(url: str, params: dict, headers: dict) -> dict:
+    _rate_limit_sleep(REQUEST_PAUSE)
+    last: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            res = requests.get(url, params=params, headers=headers, timeout=TIMEOUT)
+            res.raise_for_status()
+            return res.json()
+        except requests.RequestException as err:
+            last = err
+            status = getattr(err.response, "status_code", None)
+            if status is not None and 400 <= status < 500:
+                break
+            time.sleep(RETRY_DELAY * attempt)
+        except ValueError as err:
+            last = err
+            break
+    raise RuntimeError(f"Gọi API thất bại ({url}): {last}")
+
+
+def save_csv(df: pd.DataFrame, path: str, keys: list[str]) -> int:
+    if df.empty:
+        return 0
+    df = df.copy()
+    for col in df.select_dtypes("datetime").columns:
+        df[col] = df[col].dt.strftime("%Y-%m-%d %H:%M:%S")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    if os.path.exists(path):
+        df = pd.concat([pd.read_csv(path, dtype={k: str for k in keys}), df], ignore_index=True)
+    df = df.drop_duplicates(subset=keys, keep="last").sort_values(keys)
+    df.to_csv(path, index=False, encoding="utf-8-sig")
+    return len(df)
+
+
+# ==============================================================================
+# GIÁ: DNSE (chính) + vnstock (dự phòng)
+# ==============================================================================
+_token = {"value": "", "at": 0.0}
+
+
+def dnse_token() -> str:
+    if not DNSE_API_KEY:
+        return ""
+    if _token["value"] and time.time() - _token["at"] < TOKEN_REFRESH_SECONDS:
+        return _token["value"]
+    _rate_limit_sleep(REQUEST_PAUSE)
+    payload = {"apiKey": DNSE_API_KEY, **({"secretKey": DNSE_SECRET_KEY} if DNSE_SECRET_KEY else {})}
+    try:
+        res = requests.post(URL_DNSE_AUTH, json=payload, headers=HEADERS, timeout=TIMEOUT)
+        res.raise_for_status()
+        body = res.json()
+        token = body.get("accessToken") or body.get("access_token") or body.get("token") or ""
+        if not token:
+            raise ValueError("phản hồi không chứa token")
+        _token.update(value=token, at=time.time())
+        return token
+    except (requests.RequestException, ValueError) as err:
+        log.warning("Xác thực DNSE thất bại (%s) -> gọi dữ liệu công khai.", err)
+        return ""
+
+
+def standardize_ohlcv(raw: pd.DataFrame, symbol: str, resolution: str, source: str, time_is_unix: bool) -> pd.DataFrame:
+    need = ["time", "open", "high", "low", "close", "volume"]
+    missing = [c for c in need if c not in raw.columns]
+    if missing:
+        raise ValueError(f"Thiếu cột dữ liệu: {missing}")
+    df = raw[need].copy()
+    df[need[1:]] = df[need[1:]].apply(pd.to_numeric, errors="coerce")
+    if time_is_unix:
+        stamps = pd.to_datetime(pd.to_numeric(df["time"], errors="coerce"), unit="s", utc=True)
+        df["time"] = stamps.dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None)
+    else:
+        stamps = pd.to_datetime(df["time"], errors="coerce")
+        df["time"] = stamps.dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None) if stamps.dt.tz is not None else stamps
+    df = df.dropna()
+    ok = (df[["open", "high", "low", "close"]] > 0).all(axis=1) & (df["high"] >= df["low"]) & (df["volume"] >= 0)
+    df = df[ok].drop_duplicates("time", keep="last").sort_values("time").reset_index(drop=True)
+    if df.empty:
+        raise ValueError("Không còn dòng hợp lệ sau khi làm sạch")
+    prices = ["open", "high", "low", "close"]
+    mult = 1 if symbol in INDEX_SYMBOLS else PRICE_MULTIPLIER.get(source, 1)
+    df[prices] = df[prices].astype("float64") * mult
+    df["volume"] = df["volume"].round().astype("int64")
+    df["symbol"], df["resolution"], df["source"] = symbol, resolution, source
+    return df[PRICE_COLUMNS]
+
+
+def drop_unclosed_candles(df: pd.DataFrame, resolution: str) -> pd.DataFrame:
+    if resolution in ("1D", "1W"):
+        return df
+    now = datetime.now(VN_TZ).replace(tzinfo=None)
+    end_time = df["time"] + timedelta(seconds=BAR_SECONDS[resolution]) if BAR_TIME_IS_START else df["time"]
+    return df[end_time <= now].reset_index(drop=True)
+
+
+def fetch_prices_dnse(symbol: str, start: date, end: date, resolution: str) -> pd.DataFrame:
+    day0 = lambda d: int(datetime(d.year, d.month, d.day, tzinfo=VN_TZ).timestamp())  # noqa: E731
+    from_ts, to_ts = day0(start), min(day0(end) + 86399, int(time.time()))
+    if to_ts <= from_ts:
+        raise ValueError("Khoảng thời gian không hợp lệ")
+    params = {"from": from_ts, "to": to_ts, "symbol": symbol, "resolution": resolution}
+    headers = dict(HEADERS)
+    if token := dnse_token():
+        headers["Authorization"] = f"Bearer {token}"
+    urls = URL_DNSE_CHART_INDEX + URL_DNSE_CHART_STOCK if symbol in INDEX_SYMBOLS else URL_DNSE_CHART_STOCK
+    keys, errors = ["t", "o", "h", "l", "c", "v"], []
+    for url in urls:
+        try:
+            payload = _get_json(url, params, headers)
+            data = payload.get("data", payload) if isinstance(payload, dict) else None
+            if not isinstance(data, dict) or [k for k in keys if k not in data]:
+                raise ValueError("thiếu trường t/o/h/l/c/v")
+            if len({len(data[k]) for k in keys}) != 1:
+                raise ValueError("các mảng t/o/h/l/c/v khác độ dài")
+            raw = pd.DataFrame({"time": data["t"], "open": data["o"], "high": data["h"],
+                                "low": data["l"], "close": data["c"], "volume": data["v"]})
+            return standardize_ohlcv(raw, symbol, resolution, "DNSE", time_is_unix=True)
+        except (RuntimeError, ValueError) as err:
+            errors.append(f"{url} -> {err}")
+    raise RuntimeError(" | ".join(errors))
+
+
+def fetch_prices_vnstock(symbol: str, start: date, end: date, resolution: str) -> pd.DataFrame:
+    _rate_limit_sleep(VNSTOCK_CALL_INTERVAL)
+    kwargs = {"start": start.isoformat(), "end": (end + timedelta(days=1)).isoformat(), "interval": VNSTOCK_INTERVALS[resolution]}
+    try:
+        from vnstock.api.quote import Quote
+        df = Quote(source="VCI", symbol=symbol).history(**kwargs)
+    except ImportError:
+        from vnstock import Vnstock
+        df = Vnstock().stock(symbol=symbol, source="VCI").quote.history(**kwargs)
+    if df is None or df.empty:
+        raise ValueError("vnstock trả về dữ liệu rỗng")
+    names = {"time": {"time", "date", "datetime", "tradingdate"}, "open": {"open"}, "high": {"high"},
+             "low": {"low"}, "close": {"close"}, "volume": {"volume", "vol"}}
+    rename = {}
+    for col in df.columns:
+        for std, alias in names.items():
+            if _norm(col) in alias and std not in rename.values():
+                rename[col] = std
+    return standardize_ohlcv(df.rename(columns=rename), symbol, resolution, "VNSTOCK", time_is_unix=False)
+
+
+def fetch_prices(symbol: str, start: date, end: date, resolution: str, closed_only: bool = True,
+                 source: str = "auto") -> pd.DataFrame:
+    symbol = validate_symbol(symbol)
+    if resolution not in BAR_SECONDS:
+        raise ValueError(f"resolution '{resolution}' không hỗ trợ. Chọn: {list(BAR_SECONDS)}")
+    if start > end:
+        raise ValueError("Ngày bắt đầu phải <= ngày kết thúc")
+    errors = []
+    for src in {"dnse": ["DNSE"], "vnstock": ["VNSTOCK"], "auto": ["DNSE", "VNSTOCK"]}[source]:
+        try:
+            df = fetch_prices_dnse(symbol, start, end, resolution) if src == "DNSE" \
+                else fetch_prices_vnstock(symbol, start, end, resolution)
+            return drop_unclosed_candles(df, resolution) if closed_only else df
+        except (BaseException) as err:
+            errors.append(f"{src}: {err}")
+    raise RuntimeError(" || ".join(errors))
+
+
+def collect_prices(symbols: list[str], resolution: str = COLLECT_RESOLUTION, start: date | None = None,
+                   end: date | None = None, pause: float = REQUEST_PAUSE, source: str = "auto",
+                   indexes: list[str] = DEFAULT_INDEXES) -> pd.DataFrame:
+    end = end or datetime.now(VN_TZ).date()
+    start = start or end - timedelta(days=180 if resolution in ("1D", "1W") else WARMUP_DAYS)
+    names = list(dict.fromkeys(validate_symbol(s) for s in [*symbols, *indexes]))
+    frames, failed = [], []
+    for i, sym in enumerate(names):
+        try:
+            df = fetch_prices(sym, start, end, resolution, source=source)
+            if df.empty:
+                log.info("%s: chưa có nến %s đã đóng.", sym, resolution)
+            else:
+                frames.append(df)
+        except (RuntimeError, ValueError) as err:
+            failed.append(sym)
+            log.warning("%s: không lấy được giá: %s", sym, err)
+        if pause > 0 and i < len(names) - 1:
+            _rate_limit_sleep(max(REQUEST_PAUSE, float(pause)))
+    log.info("Giá: %d/%d mã có dữ liệu.", len(frames), len(names))
+    if failed:
+        log.warning("Thiếu giá của: %s", ", ".join(failed))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=PRICE_COLUMNS)
+
+
+# ---- Thu thập định kỳ đúng mốc nến đóng ----
+def next_collection_time(now: datetime, resolution: str = COLLECT_RESOLUTION, all_hours: bool = False) -> datetime:
+    step = BAR_SECONDS[resolution]
+    base = (int(now.timestamp()) // step) * step
+    for k in range(14 * 86400 // step + 2):
+        bar_close = datetime.fromtimestamp(base + k * step, VN_TZ)
+        due = bar_close + timedelta(seconds=CANDLE_CLOSE_DELAY)
+        minutes = bar_close.hour * 60 + bar_close.minute
+        in_session = bar_close.weekday() < 5 and (9 * 60 < minutes <= 11 * 60 + 30 or 13 * 60 < minutes <= 15 * 60)
+        if due > now and (all_hours or in_session):
+            return due
+    return now + timedelta(seconds=step)
+
+
+def run_periodic(symbols: list[str], resolution: str = COLLECT_RESOLUTION, csv_path: str = "output/prices_15.csv",
+                 iterations: int | None = None, all_hours: bool = False) -> None:
+    n = 0
+    try:
+        while iterations is None or n < iterations:
+            n += 1
+            try:
+                df = collect_prices(symbols, resolution)
+                total = save_csv(df, csv_path, ["symbol", "resolution", "time"])
+                log.info("Lần %d: nhận %d nến, CSV có %d dòng.", n, len(df), total)
+            except Exception:  # noqa: BLE001
+                log.exception("Chu kỳ #%d lỗi, thử lại ở chu kỳ sau.", n)
+            if iterations is not None and n >= iterations:
+                break
+            due = next_collection_time(datetime.now(VN_TZ), resolution, all_hours)
+            log.info("Lần thu thập tiếp theo: %s", due.strftime("%Y-%m-%d %H:%M:%S"))
+            while (left := (due - datetime.now(VN_TZ)).total_seconds()) > 0:
+                time.sleep(min(left, 30))
+    except KeyboardInterrupt:
+        log.info("Đã dừng theo yêu cầu.")
+
+
+# ==============================================================================
+# CHỈ SỐ TÀI CHÍNH: vnstock (chính) + CSV (dự phòng)
+# ==============================================================================
+def _blank() -> pd.DataFrame:
+    return pd.DataFrame({"period": pd.Series(dtype=str), **{m: pd.Series(dtype=float) for m in METRICS}})
+
+
+def _std_period(label, report_type: str) -> str | None:
+    text = str(label).upper()
+    m = re.search(r"(?:19|20)\d{2}", text)
+    if not m:
+        return None
+    quarter = re.search(r"[1-4]", text[:m.start()] + " " + text[m.end():])
+    return f"{m.group(0)}-Q{quarter.group(0)}" if report_type == "quarter" and quarter else m.group(0)
+
+
+def _period_key(period: str) -> tuple[int, int]:
+    m = re.match(r"(\d{4})(?:-Q(\d))?", str(period))
+    return (int(m.group(1)), int(m.group(2) or 0)) if m else (-1, -1)
+
+
+def _default_anchor(report_type: str) -> str:
+    today = datetime.now(VN_TZ).date()
+    if report_type == "year":
+        return str(today.year - 1)
+    q = (today.month - 1) // 3 + 1
+    return f"{today.year - 1}-Q4" if q == 1 else f"{today.year}-Q{q - 1}"
+
+
+def _expected_periods(latest: str, n: int, report_type: str) -> list[str]:
+    y, q = _period_key(latest)
+    out = []
+    for _ in range(n):
+        if report_type == "quarter":
+            out.append(f"{y}-Q{q}")
+            y, q = (y - 1, 4) if q == 1 else (y, q - 1)
+        else:
+            out.append(str(y))
+            y -= 1
+    return out
+
+
+def _keys_of(label) -> set[str]:
+    if isinstance(label, tuple):
+        parts = [_norm(p) for p in label if str(p).strip() and not str(p).startswith("Unnamed")]
+        return set(parts) | {"".join(parts)}
+    return {_norm(label)}
+
+
+def _find_column(df: pd.DataFrame, aliases):
+    for alias in aliases:
+        norm_alias = _norm(alias)
+        for col in df.columns:
+            keys = _keys_of(col)
+            if norm_alias in keys:
+                return col
+    return None
+
+
+def _coerce_csv_metric(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    mapped = {}
+    for key, aliases in METRIC_ALIASES.items():
+        col = _find_column(df, aliases)
+        if col is not None:
+            mapped[key] = df[col]
+    for key, s in mapped.items():
+        df[key] = pd.to_numeric(s, errors='coerce')
+    if 'pe' in df.columns and 'pe' not in mapped:
+        df['pe'] = pd.to_numeric(df.get('pe', pd.Series(dtype=float)), errors='coerce')
+    if 'after_tax_margin' in df.columns and 'net_margin' not in df.columns:
+        df['net_margin'] = pd.to_numeric(df['after_tax_margin'], errors='coerce')
+    if 'debt_to_equity' in df.columns and 'debt_to_equity' not in df.columns:
+        df['debt_to_equity'] = pd.to_numeric(df['debt_to_equity'], errors='coerce')
+    if 'profit_after_tax' not in df.columns and 'market_cap' in df.columns and 'pe' in df.columns:
+        market_cap = pd.to_numeric(df['market_cap'], errors='coerce')
+        pe = pd.to_numeric(df['pe'], errors='coerce')
+        df['profit_after_tax'] = market_cap / pe.replace(0, pd.NA)
+    return df
+
+
+def _col(df: pd.DataFrame, col) -> pd.Series:
+    s = df[col]
+    return s.iloc[:, 0] if isinstance(s, pd.DataFrame) else s
+
+
+def _from_period_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
+    out = pd.DataFrame(index=range(len(df)))
+    for metric, aliases in METRIC_ALIASES.items():
+        col = _find_column(df, aliases)
+        out[metric] = float("nan") if col is None else pd.to_numeric(_col(df, col), errors="coerce").to_numpy()
+    y, q, p = (_find_column(df, k) for k in (YEAR_KEYS, QUARTER_KEYS, PERIOD_KEYS))
+    by_period = [_std_period(v, report_type) for v in _col(df, p)] if p is not None else None
+    if by_period and any(v and (report_type == "year" or "-Q" in v) for v in by_period):
+        out["period"] = by_period
+    elif y is not None:
+        years = pd.to_numeric(_col(df, y), errors="coerce").to_numpy()
+        quarters = pd.to_numeric(_col(df, q), errors="coerce").to_numpy() if q is not None else [float("nan")] * len(df)
+        out["period"] = [None if pd.isna(yr) else
+                         (f"{int(yr)}-Q{int(qt)}" if report_type == "quarter" and 1 <= (qt if pd.notna(qt) else 0) <= 4 else str(int(yr)))
+                         for yr, qt in zip(years, quarters)]
+    else:
+        out["period"] = by_period
+    return out
+
+
+def _from_item_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
+    flat = df.copy()
+    flat.columns = [str(c) for c in flat.columns]
+    meta = [i for i, c in enumerate(flat.columns) if _norm(c) in {"item", "itemen", "itemid"}]
+    cols, seen = [], set()
+    for i, c in enumerate(flat.columns):
+        if i not in meta and c not in seen:
+            seen.add(c)
+            cols.append(i)
+    row_keys = [{_norm(flat.iat[r, m]) for m in meta if pd.notna(flat.iat[r, m])} for r in range(len(flat))]
+    out = pd.DataFrame({"period": [_std_period(flat.columns[i], report_type) for i in cols]})
+    for metric, aliases in METRIC_ALIASES.items():
+        out[metric] = float("nan")
+        for alias in aliases:
+            norm_alias = _norm(alias)
+            r = next((r for r, k in enumerate(row_keys) if any(norm_alias in item or item in norm_alias for item in k)), None)
+            if r is not None:
+                out[metric] = pd.to_numeric(flat.iloc[r, cols], errors="coerce").to_numpy()
+                break
+    return out
+
+
+def to_tidy(df: pd.DataFrame | None, report_type: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return _blank()
+    is_items = any(_norm(c) in {"itemid", "itemen"} for c in df.columns)
+    tidy = _from_item_rows(df, report_type) if is_items else _from_period_rows(df, report_type)
+    tidy = tidy.dropna(subset=["period"])
+    tidy = tidy.groupby("period", as_index=False).first()
+    return tidy[["period", *METRICS]]
+
+
+_last_call = [0.0]
+
+
+def _finance_client(symbol: str, period: str):
+    for module_name, classes in (("vnfinancial", ("Financial", "VnFinancial", "Finance", "Client")),
+                                 ("vnstock.api.financial", ("Finance",))):
+        try:
+            module = __import__(module_name, fromlist=list(classes))
+        except Exception:
+            continue
+        for name in classes:
+            cls = getattr(module, name, None)
+            if cls is None:
+                continue
+            try:
+                return cls(source="VCI", symbol=symbol, period=period)
+            except Exception:
+                continue
+    from vnstock import Vnstock
+    return Vnstock().stock(symbol=symbol, source="VCI").finance
+
+
+def _call(method, report_type: str):
+    for attempt in range(1, VNSTOCK_RETRIES + 1):
+        _rate_limit_sleep(VNSTOCK_CALL_INTERVAL)
+        wait = VNSTOCK_CALL_INTERVAL - (time.time() - _last_call[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[0] = time.time()
+        try:
+            for extra in ({"get_all": True}, {}):
+                try:
+                    return method(period=report_type, lang="en", **extra)
+                except TypeError:
+                    continue
+            raise TypeError("Không gọi được phương thức tài chính của vnstock")
+        except BaseException as err:
+            limited = isinstance(err, SystemExit) or re.search(r"rate|limit|429|too many", str(err), re.I)
+            if not limited or attempt == VNSTOCK_RETRIES:
+                raise RuntimeError(f"Lỗi gọi vnstock: {err}") from err
+            sleep_time = 30 * attempt
+            log.warning("vnstock bị giới hạn tốc độ (Rate Limit), tạm dừng %ds rồi thử lại...", sleep_time)
+            time.sleep(sleep_time)
+
+
+def _usable(tidy: pd.DataFrame, report_type: str) -> bool:
+    good = tidy["period"].astype(str).str.contains("-Q") if report_type == "quarter" else tidy["period"].notna()
+    return bool((good & tidy[METRICS].notna().any(axis=1)).any())
+
+
+def fetch_financial_vnstock(symbol: str, report_type: str) -> tuple[pd.DataFrame, str]:
+    tidy, notes = _blank(), []
+    try:
+        client = _finance_client(symbol, report_type)
+        raw = _call(client.ratio, report_type)
+        tidy = to_tidy(raw, report_type)
+    except BaseException as err:
+        return tidy, f"{type(err).__name__}: {err}"
+    if not _usable(tidy, report_type):
+        notes.append("ratio không dùng được")
+        tidy = _blank()
+    if tidy.empty or tidy[["eps", "profit_after_tax"]].isna().any(axis=None):
+        try:
+            raw_inc = _call(client.income_statement, report_type)
+            inc = to_tidy(raw_inc, report_type)[["period", "eps", "profit_after_tax"]]
+            tidy = tidy.set_index("period").combine_first(inc.set_index("period")).reset_index()[["period", *METRICS]]
+        except BaseException as err:
+            notes.append(f"income_statement: {err}")
+    return tidy, " || ".join(notes)
+
+
+# ---- Nguồn 2: CSV dự phòng ----
+_warned_paths: set[str] = set()
+
+
+def _resolve_csv(path: str | None) -> str:
+    path = path or FINANCIAL_CSV_PATH
+    if os.path.isabs(path) or os.path.exists(path):
+        return path
+    alt = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+    return alt if os.path.exists(alt) else path
+
+
+def _read_financial_csv(path: str) -> pd.DataFrame:
+    for sep in (None, ",", ";"):
+        try:
+            df = pd.read_csv(path, engine="python") if sep is None else pd.read_csv(path, sep=sep, engine="python")
+            if not df.empty and isinstance(df.columns, pd.Index):
+                return df
+        except Exception:
+            continue
+    return pd.DataFrame()
+
+
+def load_csv_backup(symbol: str, report_type: str, path: str | None = None) -> pd.DataFrame:
+    path = _resolve_csv(path)
+    if not os.path.exists(path):
+        if path not in _warned_paths:
+            _warned_paths.add(path)
+            log.warning("KHÔNG TÌM THẤY CSV dự phòng: %s", os.path.abspath(path))
+        return _blank()
+    try:
+        df = _read_financial_csv(path)
+        if df.empty:
+            raise ValueError("CSV rỗng")
+        df = _coerce_csv_metric(df)
+        t = _find_column(df, TICKER_KEYS)
+        if t is None:
+            raise ValueError("CSV thiếu cột ticker/symbol")
+        df = df[df[t].astype(str).str.strip().str.upper() == symbol]
+        q = _find_column(df, QUARTER_KEYS)
+        if report_type == "year" and q is not None:
+            df = df[pd.to_numeric(_col(df, q), errors="coerce") == 4]
+        return to_tidy(df.reset_index(drop=True), report_type)
+    except Exception as err:
+        log.warning("%s: đọc CSV dự phòng lỗi: %s", symbol, err)
+        return _blank()
+
+
+# ---- Gộp + chuẩn hóa ----
+def get_financials(symbol: str, report_type: str = "quarter", max_periods: int = MAX_FINANCE_PERIODS,
+                   csv_path: str | None = None) -> pd.DataFrame:
+    symbol = validate_symbol(symbol)
+    if report_type not in ("quarter", "year"):
+        raise ValueError("report_type phải là 'quarter' hoặc 'year'")
+
+    vn, vn_err = fetch_financial_vnstock(symbol, report_type)
+    vn = vn.set_index("period")
+    bk = load_csv_backup(symbol, report_type, csv_path).set_index("period")
+
+    merged = vn.combine_first(bk)[METRICS]
+    if report_type == "quarter":
+        merged = merged[merged.index.astype(str).str.contains("-Q")]
+    latest = max([_default_anchor(report_type), *merged.index], key=_period_key)
+    merged = merged.reindex(_expected_periods(latest, max_periods, report_type))
+    merged.index.name = "period"
+
+    has = merged[METRICS].notna().any(axis=1)
+    vn_part = vn.reindex(merged.index)[METRICS]
+    filled = (vn_part.isna() & merged.notna()).any(axis=1)
+    merged["source"] = ["none" if not h else "csv" if not v else "vnstock+csv" if f else "vnstock"
+                        for h, v, f in zip(has, vn_part.notna().any(axis=1), filled)]
+    merged["status"] = ["MISSING" if not h else "OK" if a else "PARTIAL"
+                        for h, a in zip(has, merged[METRICS].notna().all(axis=1))]
+
+    merged = merged.reset_index()
+    for m, digits in METRIC_DIGITS.items():
+        merged[m] = merged[m].astype(float).round(digits)
+    merged["symbol"], merged["period_type"] = symbol, report_type
+    return merged[FIN_COLUMNS]
+
+
+def get_financials_many(symbols: list[str], report_type: str = "quarter", max_periods: int = MAX_FINANCE_PERIODS,
+                        csv_path: str | None = None, pause: float = REQUEST_PAUSE) -> pd.DataFrame:
+    frames = []
+    for i, sym in enumerate(symbols):
+        try:
+            frames.append(get_financials(sym, report_type, max_periods, csv_path))
+        except BaseException as err:
+            log.warning("%s: %s", sym, err)
+        if pause > 0 and i < len(symbols) - 1:
+            _rate_limit_sleep(max(REQUEST_PAUSE, float(pause)))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=FIN_COLUMNS)
+
+
+# ==============================================================================
+# KIỂM TRA CHẤT LƯỢNG DỮ LIỆU
+# ==============================================================================
+def check_data(prices: pd.DataFrame | None = None, fin: pd.DataFrame | None = None,
+               expected: list[str] | None = None, since_quarter: str = "2024-Q1") -> None:
+    if prices is not None:
+        print("=== GIÁ ===")
+        if prices.empty:
+            print("Không có dòng giá nào.")
+        else:
+            g = prices.groupby("symbol").agg(so_nen=("time", "size"), tu=("time", "min"), den=("time", "max"), nguon=("source", "first"))
+            print(g.to_string())
+            print(f"Dòng trùng (symbol, resolution, time): {int(prices.duplicated(['symbol', 'resolution', 'time']).sum())}"
+                  f" | nguồn lạ/giả: {sorted(set(prices['source']) - KNOWN_SOURCES) or 'không'}")
+        if expected:
+            absent = [s for s in expected if s not in set(prices.get("symbol", []))]
+            print("Mã CHƯA có giá:", absent or "không")
+    if fin is not None:
+        print("=== BCTC ===")
+        if fin.empty:
+            print("Không có dòng BCTC nào.")
+        else:
+            rows = []
+            for (sym, kind), g in fin.groupby(["symbol", "period_type"], sort=False):
+                st = g["status"].value_counts()
+                scope = g[g["period"].map(_period_key) >= _period_key(since_quarter)] if kind == "quarter" else g
+                rows.append({"symbol": sym, "type": kind, "OK": st.get("OK", 0), "PARTIAL": st.get("PARTIAL", 0),
+                             "MISSING": st.get("MISSING", 0), "sources": "/".join(sorted(set(g["source"]) - {"none"})) or "-",
+                             "missing_periods": ",".join(scope.loc[scope["status"] == "MISSING", "period"]) or "-"})
+            print(pd.DataFrame(rows).fillna("").to_string(index=False))
+            print(f"Dòng trùng (symbol, period_type, period): {int(fin.duplicated(['symbol', 'period_type', 'period']).sum())}"
+                  f" | nguồn lạ/giả: {sorted(set(fin['source']) - KNOWN_SOURCES) or 'không'}")
+        if expected:
+            absent = [s for s in expected if s not in set(fin.get("symbol", []))]
+            print("Mã CHƯA có trong BCTC:", absent or "không")
+===== data_layer1_2_3_2.py =====
+from __future__ import annotations
+
+import logging
+import os
+import re
+import time
+import unicodedata
+from datetime import date, datetime, timedelta, timezone
+
+import pandas as pd
+import requests
+
+log = logging.getLogger("api")
+
+# ==============================================================================
+# CẤU HÌNH
+# ==============================================================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DNSE_API_KEY = os.getenv("DNSE_API_KEY", "eyJvcmciOiJkbnNlIiwiaWQiOiI1ZWVjYzY0YTY5ZjI0ZmE5YTU1ODMwM2Y5ZjhiMzVkMiIsImgiOiJtdXJtdXIxMjgifQ==")
+DNSE_SECRET_KEY = os.getenv("DNSE_SECRET_KEY", "IUPiXi7W5Xl2fDIKrU6HpmrGJGHwWIWwwwYVemi5yx2Hlsz4E5RQoZYWHYjKfJICImfeokRO1n8Je-FGvGUEXg")
+URL_DNSE_AUTH = "https://services.entrade.com.vn/dnse-auth-service/v1/login"          # CHƯA xác minh
+URL_DNSE_CHART_STOCK = (                                                              # CHƯA xác minh, thử lần lượt
+    "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock",
+    "https://services.entrade.com.vn/chart-api/v2/ohlcs",
+)
+URL_DNSE_CHART_INDEX = ("https://services.entrade.com.vn/chart-api/v2/ohlcs/index",)  # CHƯA xác minh
+
+# >>> ĐƯỜNG DẪN CSV BCTC DỰ PHÒNG: bù kỳ / chỉ số mà vnstock thiếu <<<
+FINANCIAL_CSV_PATH = os.getenv(
+    "FINANCIAL_CSV_PATH",
+    os.path.join(BASE_DIR, "Filedata.csv"),
+)
+
+INDEX_SYMBOLS = {"VNINDEX", "VN30", "HNXINDEX", "HNX30", "UPCOMINDEX"}   # mã chỉ số (không nhân PRICE_MULTIPLIER)
+DEFAULT_INDEXES = ["VNINDEX"]
+
+DEFAULT_SYMBOLS = [
+    # --- 1. Ngân hàng (22 mã) ---
+    "VCB", "BID", "CTG", "TCB", "MBB", "ACB", "VPB", "STB", "HDB", "TPB",
+    "LPB", "SHB", "MSB", "VIB", "EIB", "SSB", "OCB", "BAB", "ABB", "NAB",
+    "SGB", "BVB",
+
+    # --- 2. Chứng khoán (23 mã) ---
+    "SSI", "VCI", "HCM", "VND", "MBS", "SHS", "FTS", "CTS", "BSI", "AGR",
+    "ORS", "VDS", "BVS", "IVS", "TCI", "VIX", "SBS", "TVB", "PSI", "WSS",
+    "APG", "EIV", "HBS",
+
+    # --- 3. Bất động sản Dân dụng & Khu công nghiệp (45 mã) ---
+    "VIC", "VHM", "VRE", "NVL", "KDH", "NLG", "PDR", "DXG", "DIG", "CEO",
+    "KBC", "IDC", "SZC", "ITA", "SIP", "LHGP", "BCM", "TCH", "HDG", "NTH",
+    "CRE", "KHG", "DXS", "HQC", "SCR", "LDG", "CIIC", "NBB", "IJC", "AGG",
+    "HDC", "D2D", "NTC", "TIP", "VRG", "DRH", "SJS", "L14", "VC3", "IDV",
+    "DTG", "TDH", "ITC", "STL", "CCL",
+
+    # --- 4. Thép, Vật liệu xây dựng & Hóa chất (30 mã) ---
+    "HPG", "HSG", "NKG", "SMC", "TLH", "POM", "VGS", "DGC", "DCM", "DPM",
+    "CSV", "BFC", "LAS", "PLC", "HT1", "BCC", "BMP", "NTP", "DPR", "PHR",
+    "GVR", "DRI", "TNC", "VIS", "HLA", "KHB", "HOM", "C32", "DHA", "LBM",
+
+    # --- 5. Bán lẻ, Tiêu dùng, Nông nghiệp & Đồ uống (35 mã) ---
+    "MWG", "FRT", "PNJ", "MSN", "VNM", "SAB", "BHN", "DGW", "HAX", "PET",
+    "KDC", "MCH", "QNS", "TLG", "DBC", "BAF", "HNG", "HAG", "PAN", "LTG",
+    "VCF", "SBT", "SLS", "LSS", "MCM", "CLM", "TAR", "BFN", "BBC", "NAF",
+    "VHE", "TSC", "SJ1", "APF", "LIX",
+
+    # --- 6. Công nghệ, Viễn thông & Vận tải, Logistics, Cảng biển (35 mã) ---
+    "FPT", "CMG", "ELC", "CTR", "FOX", "VGI", "SGP", "GMD", "HAH", "VSC",
+    "VJC", "HVN", "AST", "ACV", "TMS", "ILB", "SFI", "SAD", "PVT", "PVP",
+    "VIP", "VTO", "SCT", "PDN", "CLL", "TCO", "PJT", "ITD", "SAM", "TTN",
+    "VTC", "SGT", "SRT", "HRT", "TTV",
+
+    # --- 7. Dầu khí, Năng lượng, Điện & Nước (35 mã) ---
+    "GAS", "PLX", "POW", "PVD", "PVS", "PVC", "PVB", "BSR", "OIL", "REE",
+    "PC1", "GEG", "TTA", "NT2", "QTP", "HND", "SJD", "VSH", "SNC", "PGD",
+    "CNG", "ASP", "PGS", "PVG", "TV4", "TBC", "VPD", "SJD", "SEB", "NED",
+    "BTP", "PPA", "DNW", "TDW", "TDM",
+
+    # --- 8. Dệt may, Thủy sản, Gỗ & Cao su tự nhiên (30 mã) ---
+    "VHC", "ANV", "IDI", "FMC", "MPC", "CMX", "TNG", "MSH", "STK", "GIL",
+    "TTC", "GDT", "VGT", "TCM", "VTK", "ADS", "MDT", "HTG", "AAM", "ACL",
+    "BLF", "SSN", "PTB", "TTF", "GTA", "ACG", "TRC", "RTB", "HRC", "DRI",
+
+    # --- 9. Xây dựng, Đầu tư công & Hạ tầng (30 mã) ---
+    "VCG", "HHV", "C4G", "FCN", "LCG", "CTD", "HBC", "DCN", "DTI", "KSB",
+    "SCN", "G36", "TV2", "HID", "EVG", "HUB", "LIG", "VNE", "TBD", "TCD",
+    "BOT", "C92", "PNE", "KPF", "S99", "SCI", "HDA", "PXI", "PXS", "L40",
+
+    # --- 10. Dược phẩm, Y tế & Khác (15 mã) ---
+    "DHG", "IMP", "TRA", "DBD", "DMC", "DCL", "PMC", "AMV", "JVC", "FIT",
+    "RAL", "VMD", "LDP", "SPM", "DP3"
+]
+TIMEOUT, MAX_RETRIES, RETRY_DELAY, REQUEST_PAUSE = 15, 3, 1.5, 3.5
+COLLECT_RESOLUTION = "15"        # nến 15 phút (quyết định của nhóm)
+CANDLE_CLOSE_DELAY = 20          # giây chờ sau khi nến đóng rồi mới gọi API
+WARMUP_DAYS = 7                  # số ngày tải lùi cho EMA50, RSI14, ATR14...
+TOKEN_REFRESH_SECONDS = 4 * 3600
+BAR_TIME_IS_START = True         # CHƯA xác minh: 't' của DNSE là giờ BẮT ĐẦU nến. Nếu là giờ kết thúc -> False
+PRICE_MULTIPLIER = {"DNSE": 1, "VNSTOCK": 1}   # đặt 1000 nếu nguồn trả giá theo nghìn đồng; 2 nguồn phải CÙNG đơn vị
+MAX_FINANCE_PERIODS = 10
+VNSTOCK_CALL_INTERVAL = 3.5      # giãn cách tối thiểu giữa các lần gọi vnstock để không dính rate limit 20 req/phút
+VNSTOCK_RETRIES = 3
+
+VN_TZ = timezone(timedelta(hours=7))
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"}
+BAR_SECONDS = {"1": 60, "5": 300, "15": 900, "30": 1800, "1H": 3600, "1D": 86400, "1W": 604800}
+VNSTOCK_INTERVALS = {"1": "1m", "5": "5m", "15": "15m", "30": "30m", "1H": "1H", "1D": "1D", "1W": "1W"}
+
+# ---- Format CHUẨN ----
+PRICE_COLUMNS = ["symbol", "resolution", "time", "open", "high", "low", "close", "volume", "source"]
+METRICS = ["roe", "roa", "eps", "pe", "pb", "net_margin", "debt_to_equity", "profit_after_tax"]
+FIN_COLUMNS = ["symbol", "period_type", "period", *METRICS, "status", "source"]
+METRIC_DIGITS = {"roe": 4, "roa": 4, "eps": 2, "pe": 2, "pb": 2,
+                 "net_margin": 4, "debt_to_equity": 4, "profit_after_tax": 2}
+KNOWN_SOURCES = {"DNSE", "VNSTOCK", "vnstock", "csv", "vnstock+csv", "none"}
+
+METRIC_ALIASES = {
+    "roe": ("roe", "returnonequity", "tss"),
+    "roa": ("roa", "returnonassets", "tst"),
+    "eps": (
+        "eps", "epsvnd", "earningpershare", "earningspershare", "basiceps",
+        "laicobantrencophieu", "laicobantrencophieuvnd", "lãi cơ bản trên cổ phiếu",
+        "lailotrencophieu", "lailocobantrencophieu", "lailotrencohieu"
+    ),
+    "pe": ("pe", "peratio", "pricetoearning", "giaquacophieu", "priceearningsratio"),
+    "pb": ("pb", "pbratio", "pricetobook", "giatrongso"),
+    "net_margin": (
+        "aftertaxprofitmargin", "aftertaxmargin", "netmargin", "netprofitmargin",
+        "bienlnsauthue", "bienlnrong", "profitmargin", "loinhuansauthuetrencdoanhthu",
+        "loinhuansauthuetrenndoanhthu", "loinhuansauthue", "loinhuansauthuenetrong", "loinhuanrong",
+        "after_tax_margin"
+    ),
+    "debt_to_equity": ("debttoequity", "notrenvonchu", "debtperequity", "debtequity", "novonchu", "nợvốnchu"),
+    "profit_after_tax": (
+        "aftertaxprofit", "aftertaxnetprofit", "netprofitaftertax", "profitaftertax", "netincome",
+        "netincomeaftertax", "profitaftertaxvnd", "loinhuansauthue", "loinhuansauthuevnd",
+        "lailothuansauthue", "lailothuansauthuevnd", "loinhuansauthue", "lailoaftertax",
+        "earningsaftertax", "incomeaftertax", "ketquasauthue", "loinhuansauthu"
+    ),
+}
+YEAR_KEYS, QUARTER_KEYS, PERIOD_KEYS = ("year", "nam", "yearreport"), ("quarter", "quy", "lengthreport", "quarterreport"), ("period", "reportperiod", "kybaocao")
+TICKER_KEYS = ("ticker", "symbol", "ma")
+
+
+def setup_logging(level: int = logging.INFO) -> None:
+    logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S", force=True)
+
+
+# ==============================================================================
+# HÀM DÙNG CHUNG
+# ==============================================================================
+_last_request_ts = 0.0
+
+
+def _rate_limit_sleep(min_gap: float = REQUEST_PAUSE) -> None:
+    """Giữ khoảng nghỉ tối thiểu giAữa các request, không làm ảnh hưởng lịch thu thập 15 phút."""
+    global _last_request_ts
+    now = time.monotonic()
+    if _last_request_ts:
+        wait = min_gap - (now - _last_request_ts)
+        if wait > 0:
+            time.sleep(wait)
+    _last_request_ts = time.monotonic()
+
+
+def validate_symbol(symbol: str) -> str:
+    symbol = str(symbol).upper().strip()
+    if not re.fullmatch(r"[A-Z0-9]{3,10}", symbol):
+        raise ValueError(f"Mã không hợp lệ: '{symbol}'")
+    return symbol
+
+
+def _norm(text) -> str:
+    text = unicodedata.normalize("NFD", str(text).replace("đ", "d").replace("Đ", "D"))
+    return re.sub(r"[^a-z0-9]", "", "".join(c for c in text if unicodedata.category(c) != "Mn").lower())
+
+
+def _get_json(url: str, params: dict, headers: dict) -> dict:
+    _rate_limit_sleep(REQUEST_PAUSE)
+    last: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            res = requests.get(url, params=params, headers=headers, timeout=TIMEOUT)
+            res.raise_for_status()
+            return res.json()
+        except requests.RequestException as err:
+            last = err
+            status = getattr(err.response, "status_code", None)
+            if status is not None and 400 <= status < 500:
+                break
+            time.sleep(RETRY_DELAY * attempt)
+        except ValueError as err:
+            last = err
+            break
+    raise RuntimeError(f"Gọi API thất bại ({url}): {last}")
+
+
+def save_csv(df: pd.DataFrame, path: str, keys: list[str]) -> int:
+    if df.empty:
+        return 0
+    df = df.copy()
+    for col in df.select_dtypes("datetime").columns:
+        df[col] = df[col].dt.strftime("%Y-%m-%d %H:%M:%S")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    if os.path.exists(path):
+        df = pd.concat([pd.read_csv(path, dtype={k: str for k in keys}), df], ignore_index=True)
+    df = df.drop_duplicates(subset=keys, keep="last").sort_values(keys)
+    df.to_csv(path, index=False, encoding="utf-8-sig")
+    return len(df)
+
+
+# ==============================================================================
+# GIÁ: DNSE (chính) + vnstock (dự phòng)
+# ==============================================================================
+_token = {"value": "", "at": 0.0}
+
+
+def dnse_token() -> str:
+    if not DNSE_API_KEY:
+        return ""
+    if _token["value"] and time.time() - _token["at"] < TOKEN_REFRESH_SECONDS:
+        return _token["value"]
+    _rate_limit_sleep(REQUEST_PAUSE)
+    payload = {"apiKey": DNSE_API_KEY, **({"secretKey": DNSE_SECRET_KEY} if DNSE_SECRET_KEY else {})}
+    try:
+        res = requests.post(URL_DNSE_AUTH, json=payload, headers=HEADERS, timeout=TIMEOUT)
+        res.raise_for_status()
+        body = res.json()
+        token = body.get("accessToken") or body.get("access_token") or body.get("token") or ""
+        if not token:
+            raise ValueError("phản hồi không chứa token")
+        _token.update(value=token, at=time.time())
+        return token
+    except (requests.RequestException, ValueError) as err:
+        log.warning("Xác thực DNSE thất bại (%s) -> gọi dữ liệu công khai.", err)
+        return ""
+
+
+def standardize_ohlcv(raw: pd.DataFrame, symbol: str, resolution: str, source: str, time_is_unix: bool) -> pd.DataFrame:
+    need = ["time", "open", "high", "low", "close", "volume"]
+    missing = [c for c in need if c not in raw.columns]
+    if missing:
+        raise ValueError(f"Thiếu cột dữ liệu: {missing}")
+    df = raw[need].copy()
+    df[need[1:]] = df[need[1:]].apply(pd.to_numeric, errors="coerce")
+    if time_is_unix:
+        stamps = pd.to_datetime(pd.to_numeric(df["time"], errors="coerce"), unit="s", utc=True)
+        df["time"] = stamps.dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None)
+    else:
+        stamps = pd.to_datetime(df["time"], errors="coerce")
+        df["time"] = stamps.dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None) if stamps.dt.tz is not None else stamps
+    df = df.dropna()
+    ok = (df[["open", "high", "low", "close"]] > 0).all(axis=1) & (df["high"] >= df["low"]) & (df["volume"] >= 0)
+    df = df[ok].drop_duplicates("time", keep="last").sort_values("time").reset_index(drop=True)
+    if df.empty:
+        raise ValueError("Không còn dòng hợp lệ sau khi làm sạch")
+    prices = ["open", "high", "low", "close"]
+    mult = 1 if symbol in INDEX_SYMBOLS else PRICE_MULTIPLIER.get(source, 1)
+    df[prices] = df[prices].astype("float64") * mult
+    df["volume"] = df["volume"].round().astype("int64")
+    df["symbol"], df["resolution"], df["source"] = symbol, resolution, source
+    return df[PRICE_COLUMNS]
+
+
+def drop_unclosed_candles(df: pd.DataFrame, resolution: str) -> pd.DataFrame:
+    if resolution in ("1D", "1W"):
+        return df
+    now = datetime.now(VN_TZ).replace(tzinfo=None)
+    end_time = df["time"] + timedelta(seconds=BAR_SECONDS[resolution]) if BAR_TIME_IS_START else df["time"]
+    return df[end_time <= now].reset_index(drop=True)
+
+
+def fetch_prices_dnse(symbol: str, start: date, end: date, resolution: str) -> pd.DataFrame:
+    day0 = lambda d: int(datetime(d.year, d.month, d.day, tzinfo=VN_TZ).timestamp())  # noqa: E731
+    from_ts, to_ts = day0(start), min(day0(end) + 86399, int(time.time()))
+    if to_ts <= from_ts:
+        raise ValueError("Khoảng thời gian không hợp lệ")
+    params = {"from": from_ts, "to": to_ts, "symbol": symbol, "resolution": resolution}
+    headers = dict(HEADERS)
+    if token := dnse_token():
+        headers["Authorization"] = f"Bearer {token}"
+    urls = URL_DNSE_CHART_INDEX + URL_DNSE_CHART_STOCK if symbol in INDEX_SYMBOLS else URL_DNSE_CHART_STOCK
+    keys, errors = ["t", "o", "h", "l", "c", "v"], []
+    for url in urls:
+        try:
+            payload = _get_json(url, params, headers)
+            data = payload.get("data", payload) if isinstance(payload, dict) else None
+            if not isinstance(data, dict) or [k for k in keys if k not in data]:
+                raise ValueError("thiếu trường t/o/h/l/c/v")
+            if len({len(data[k]) for k in keys}) != 1:
+                raise ValueError("các mảng t/o/h/l/c/v khác độ dài")
+            raw = pd.DataFrame({"time": data["t"], "open": data["o"], "high": data["h"],
+                                "low": data["l"], "close": data["c"], "volume": data["v"]})
+            return standardize_ohlcv(raw, symbol, resolution, "DNSE", time_is_unix=True)
+        except (RuntimeError, ValueError) as err:
+            errors.append(f"{url} -> {err}")
+    raise RuntimeError(" | ".join(errors))
+
+
+def fetch_prices_vnstock(symbol: str, start: date, end: date, resolution: str) -> pd.DataFrame:
+    _rate_limit_sleep(VNSTOCK_CALL_INTERVAL)
+    kwargs = {"start": start.isoformat(), "end": (end + timedelta(days=1)).isoformat(), "interval": VNSTOCK_INTERVALS[resolution]}
+    try:
+        from vnstock.api.quote import Quote
+        df = Quote(source="VCI", symbol=symbol).history(**kwargs)
+    except ImportError:
+        from vnstock import Vnstock
+        df = Vnstock().stock(symbol=symbol, source="VCI").quote.history(**kwargs)
+    if df is None or df.empty:
+        raise ValueError("vnstock trả về dữ liệu rỗng")
+    names = {"time": {"time", "date", "datetime", "tradingdate"}, "open": {"open"}, "high": {"high"},
+             "low": {"low"}, "close": {"close"}, "volume": {"volume", "vol"}}
+    rename = {}
+    for col in df.columns:
+        for std, alias in names.items():
+            if _norm(col) in alias and std not in rename.values():
+                rename[col] = std
+    return standardize_ohlcv(df.rename(columns=rename), symbol, resolution, "VNSTOCK", time_is_unix=False)
+
+
+def fetch_prices(symbol: str, start: date, end: date, resolution: str, closed_only: bool = True,
+                 source: str = "auto") -> pd.DataFrame:
+    symbol = validate_symbol(symbol)
+    if resolution not in BAR_SECONDS:
+        raise ValueError(f"resolution '{resolution}' không hỗ trợ. Chọn: {list(BAR_SECONDS)}")
+    if start > end:
+        raise ValueError("Ngày bắt đầu phải <= ngày kết thúc")
+    errors = []
+    for src in {"dnse": ["DNSE"], "vnstock": ["VNSTOCK"], "auto": ["DNSE", "VNSTOCK"]}[source]:
+        try:
+            df = fetch_prices_dnse(symbol, start, end, resolution) if src == "DNSE" \
+                else fetch_prices_vnstock(symbol, start, end, resolution)
+            return drop_unclosed_candles(df, resolution) if closed_only else df
+        except (BaseException) as err:
+            errors.append(f"{src}: {err}")
+    raise RuntimeError(" || ".join(errors))
+
+
+def collect_prices(symbols: list[str], resolution: str = COLLECT_RESOLUTION, start: date | None = None,
+                   end: date | None = None, pause: float = REQUEST_PAUSE, source: str = "auto",
+                   indexes: list[str] = DEFAULT_INDEXES) -> pd.DataFrame:
+    end = end or datetime.now(VN_TZ).date()
+    start = start or end - timedelta(days=180 if resolution in ("1D", "1W") else WARMUP_DAYS)
+    names = list(dict.fromkeys(validate_symbol(s) for s in [*symbols, *indexes]))
+    frames, failed = [], []
+    for i, sym in enumerate(names):
+        try:
+            df = fetch_prices(sym, start, end, resolution, source=source)
+            if df.empty:
+                log.info("%s: chưa có nến %s đã đóng.", sym, resolution)
+            else:
+                frames.append(df)
+        except (RuntimeError, ValueError) as err:
+            failed.append(sym)
+            log.warning("%s: không lấy được giá: %s", sym, err)
+        if pause > 0 and i < len(names) - 1:
+            _rate_limit_sleep(max(REQUEST_PAUSE, float(pause)))
+    log.info("Giá: %d/%d mã có dữ liệu.", len(frames), len(names))
+    if failed:
+        log.warning("Thiếu giá của: %s", ", ".join(failed))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=PRICE_COLUMNS)
+
+
+# ---- Thu thập định kỳ đúng mốc nến đóng ----
+def next_collection_time(now: datetime, resolution: str = COLLECT_RESOLUTION, all_hours: bool = False) -> datetime:
+    step = BAR_SECONDS[resolution]
+    base = (int(now.timestamp()) // step) * step
+    for k in range(14 * 86400 // step + 2):
+        bar_close = datetime.fromtimestamp(base + k * step, VN_TZ)
+        due = bar_close + timedelta(seconds=CANDLE_CLOSE_DELAY)
+        minutes = bar_close.hour * 60 + bar_close.minute
+        in_session = bar_close.weekday() < 5 and (9 * 60 < minutes <= 11 * 60 + 30 or 13 * 60 < minutes <= 15 * 60)
+        if due > now and (all_hours or in_session):
+            return due
+    return now + timedelta(seconds=step)
+
+
+def run_periodic(symbols: list[str], resolution: str = COLLECT_RESOLUTION, csv_path: str = "output/prices_15.csv",
+                 iterations: int | None = None, all_hours: bool = False) -> None:
+    n = 0
+    try:
+        while iterations is None or n < iterations:
+            n += 1
+            try:
+                df = collect_prices(symbols, resolution)
+                total = save_csv(df, csv_path, ["symbol", "resolution", "time"])
+                log.info("Lần %d: nhận %d nến, CSV có %d dòng.", n, len(df), total)
+            except Exception:  # noqa: BLE001
+                log.exception("Chu kỳ #%d lỗi, thử lại ở chu kỳ sau.", n)
+            if iterations is not None and n >= iterations:
+                break
+            due = next_collection_time(datetime.now(VN_TZ), resolution, all_hours)
+            log.info("Lần thu thập tiếp theo: %s", due.strftime("%Y-%m-%d %H:%M:%S"))
+            while (left := (due - datetime.now(VN_TZ)).total_seconds()) > 0:
+                time.sleep(min(left, 30))
+    except KeyboardInterrupt:
+        log.info("Đã dừng theo yêu cầu.")
+
+
+# ==============================================================================
+# CHỈ SỐ TÀI CHÍNH: vnstock (chính) + CSV (dự phòng)
+# ==============================================================================
+def _blank() -> pd.DataFrame:
+    return pd.DataFrame({"period": pd.Series(dtype=str), **{m: pd.Series(dtype=float) for m in METRICS}})
+
+
+def _std_period(label, report_type: str) -> str | None:
+    text = str(label).upper()
+    m = re.search(r"(?:19|20)\d{2}", text)
+    if not m:
+        return None
+    quarter = re.search(r"[1-4]", text[:m.start()] + " " + text[m.end():])
+    return f"{m.group(0)}-Q{quarter.group(0)}" if report_type == "quarter" and quarter else m.group(0)
+
+
+def _period_key(period: str) -> tuple[int, int]:
+    m = re.match(r"(\d{4})(?:-Q(\d))?", str(period))
+    return (int(m.group(1)), int(m.group(2) or 0)) if m else (-1, -1)
+
+
+def _default_anchor(report_type: str) -> str:
+    today = datetime.now(VN_TZ).date()
+    if report_type == "year":
+        return str(today.year - 1)
+    q = (today.month - 1) // 3 + 1
+    return f"{today.year - 1}-Q4" if q == 1 else f"{today.year}-Q{q - 1}"
+
+
+def _expected_periods(latest: str, n: int, report_type: str) -> list[str]:
+    y, q = _period_key(latest)
+    out = []
+    for _ in range(n):
+        if report_type == "quarter":
+            out.append(f"{y}-Q{q}")
+            y, q = (y - 1, 4) if q == 1 else (y, q - 1)
+        else:
+            out.append(str(y))
+            y -= 1
+    return out
+
+
+def _keys_of(label) -> set[str]:
+    if isinstance(label, tuple):
+        parts = [_norm(p) for p in label if str(p).strip() and not str(p).startswith("Unnamed")]
+        return set(parts) | {"".join(parts)}
+    return {_norm(label)}
+
+
+def _find_column(df: pd.DataFrame, aliases):
+    for alias in aliases:
+        norm_alias = _norm(alias)
+        for col in df.columns:
+            keys = _keys_of(col)
+            if norm_alias in keys:
+                return col
+    return None
+
+
+def _coerce_csv_metric(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    mapped = {}
+    for key, aliases in METRIC_ALIASES.items():
+        col = _find_column(df, aliases)
+        if col is not None:
+            mapped[key] = df[col]
+    for key, s in mapped.items():
+        df[key] = pd.to_numeric(s, errors='coerce')
+    if 'pe' in df.columns and 'pe' not in mapped:
+        df['pe'] = pd.to_numeric(df.get('pe', pd.Series(dtype=float)), errors='coerce')
+    if 'after_tax_margin' in df.columns and 'net_margin' not in df.columns:
+        df['net_margin'] = pd.to_numeric(df['after_tax_margin'], errors='coerce')
+    if 'debt_to_equity' in df.columns and 'debt_to_equity' not in df.columns:
+        df['debt_to_equity'] = pd.to_numeric(df['debt_to_equity'], errors='coerce')
+    if 'profit_after_tax' not in df.columns and 'market_cap' in df.columns and 'pe' in df.columns:
+        market_cap = pd.to_numeric(df['market_cap'], errors='coerce')
+        pe = pd.to_numeric(df['pe'], errors='coerce')
+        df['profit_after_tax'] = market_cap / pe.replace(0, pd.NA)
+    return df
+
+
+def _col(df: pd.DataFrame, col) -> pd.Series:
+    s = df[col]
+    return s.iloc[:, 0] if isinstance(s, pd.DataFrame) else s
+
+
+def _from_period_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
+    out = pd.DataFrame(index=range(len(df)))
+    for metric, aliases in METRIC_ALIASES.items():
+        col = _find_column(df, aliases)
+        out[metric] = float("nan") if col is None else pd.to_numeric(_col(df, col), errors="coerce").to_numpy()
+    y, q, p = (_find_column(df, k) for k in (YEAR_KEYS, QUARTER_KEYS, PERIOD_KEYS))
+    by_period = [_std_period(v, report_type) for v in _col(df, p)] if p is not None else None
+    if by_period and any(v and (report_type == "year" or "-Q" in v) for v in by_period):
+        out["period"] = by_period
+    elif y is not None:
+        years = pd.to_numeric(_col(df, y), errors="coerce").to_numpy()
+        quarters = pd.to_numeric(_col(df, q), errors="coerce").to_numpy() if q is not None else [float("nan")] * len(df)
+        out["period"] = [None if pd.isna(yr) else
+                         (f"{int(yr)}-Q{int(qt)}" if report_type == "quarter" and 1 <= (qt if pd.notna(qt) else 0) <= 4 else str(int(yr)))
+                         for yr, qt in zip(years, quarters)]
+    else:
+        out["period"] = by_period
+    return out
+
+
+def _from_item_rows(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
+    flat = df.copy()
+    flat.columns = [str(c) for c in flat.columns]
+    meta = [i for i, c in enumerate(flat.columns) if _norm(c) in {"item", "itemen", "itemid"}]
+    cols, seen = [], set()
+    for i, c in enumerate(flat.columns):
+        if i not in meta and c not in seen:
+            seen.add(c)
+            cols.append(i)
+    row_keys = [{_norm(flat.iat[r, m]) for m in meta if pd.notna(flat.iat[r, m])} for r in range(len(flat))]
+    out = pd.DataFrame({"period": [_std_period(flat.columns[i], report_type) for i in cols]})
+    for metric, aliases in METRIC_ALIASES.items():
+        out[metric] = float("nan")
+        for alias in aliases:
+            norm_alias = _norm(alias)
+            r = next((r for r, k in enumerate(row_keys) if any(norm_alias in item or item in norm_alias for item in k)), None)
+            if r is not None:
+                out[metric] = pd.to_numeric(flat.iloc[r, cols], errors="coerce").to_numpy()
+                break
+    return out
+
+
+def to_tidy(df: pd.DataFrame | None, report_type: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return _blank()
+    is_items = any(_norm(c) in {"itemid", "itemen"} for c in df.columns)
+    tidy = _from_item_rows(df, report_type) if is_items else _from_period_rows(df, report_type)
+    tidy = tidy.dropna(subset=["period"])
+    tidy = tidy.groupby("period", as_index=False).first()
+    return tidy[["period", *METRICS]]
+
+
+_last_call = [0.0]
+
+
+def _finance_client(symbol: str, period: str):
+    for module_name, classes in (("vnfinancial", ("Financial", "VnFinancial", "Finance", "Client")),
+                                 ("vnstock.api.financial", ("Finance",))):
+        try:
+            module = __import__(module_name, fromlist=list(classes))
+        except Exception:
+            continue
+        for name in classes:
+            cls = getattr(module, name, None)
+            if cls is None:
+                continue
+            try:
+                return cls(source="VCI", symbol=symbol, period=period)
+            except Exception:
+                continue
+    from vnstock import Vnstock
+    return Vnstock().stock(symbol=symbol, source="VCI").finance
+
+
+def _call(method, report_type: str):
+    for attempt in range(1, VNSTOCK_RETRIES + 1):
+        _rate_limit_sleep(VNSTOCK_CALL_INTERVAL)
+        wait = VNSTOCK_CALL_INTERVAL - (time.time() - _last_call[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[0] = time.time()
+        try:
+            for extra in ({"get_all": True}, {}):
+                try:
+                    return method(period=report_type, lang="en", **extra)
+                except TypeError:
+                    continue
+            raise TypeError("Không gọi được phương thức tài chính của vnstock")
+        except BaseException as err:
+            limited = isinstance(err, SystemExit) or re.search(r"rate|limit|429|too many", str(err), re.I)
+            if not limited or attempt == VNSTOCK_RETRIES:
+                raise RuntimeError(f"Lỗi gọi vnstock: {err}") from err
+            sleep_time = 30 * attempt
+            log.warning("vnstock bị giới hạn tốc độ (Rate Limit), tạm dừng %ds rồi thử lại...", sleep_time)
+            time.sleep(sleep_time)
+
+
+def _usable(tidy: pd.DataFrame, report_type: str) -> bool:
+    good = tidy["period"].astype(str).str.contains("-Q") if report_type == "quarter" else tidy["period"].notna()
+    return bool((good & tidy[METRICS].notna().any(axis=1)).any())
+
+
+def fetch_financial_vnstock(symbol: str, report_type: str) -> tuple[pd.DataFrame, str]:
+    tidy, notes = _blank(), []
+    try:
+        client = _finance_client(symbol, report_type)
+        raw = _call(client.ratio, report_type)
+        tidy = to_tidy(raw, report_type)
+    except BaseException as err:
+        return tidy, f"{type(err).__name__}: {err}"
+    if not _usable(tidy, report_type):
+        notes.append("ratio không dùng được")
+        tidy = _blank()
+    if tidy.empty or tidy[["eps", "profit_after_tax"]].isna().any(axis=None):
+        try:
+            raw_inc = _call(client.income_statement, report_type)
+            inc = to_tidy(raw_inc, report_type)[["period", "eps", "profit_after_tax"]]
+            tidy = tidy.set_index("period").combine_first(inc.set_index("period")).reset_index()[["period", *METRICS]]
+        except BaseException as err:
+            notes.append(f"income_statement: {err}")
+    return tidy, " || ".join(notes)
+
+
+# ---- Nguồn 2: CSV dự phòng ----
+_warned_paths: set[str] = set()
+
+
+def _resolve_csv(path: str | None) -> str:
+    path = path or FINANCIAL_CSV_PATH
+    if os.path.isabs(path) or os.path.exists(path):
+        return path
+    alt = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+    return alt if os.path.exists(alt) else path
+
+
+def _read_financial_csv(path: str) -> pd.DataFrame:
+    for sep in (None, ",", ";"):
+        try:
+            df = pd.read_csv(path, engine="python") if sep is None else pd.read_csv(path, sep=sep, engine="python")
+            if not df.empty and isinstance(df.columns, pd.Index):
+                return df
+        except Exception:
+            continue
+    return pd.DataFrame()
+
+
+def load_csv_backup(symbol: str, report_type: str, path: str | None = None) -> pd.DataFrame:
+    path = _resolve_csv(path)
+    if not os.path.exists(path):
+        if path not in _warned_paths:
+            _warned_paths.add(path)
+            log.warning("KHÔNG TÌM THẤY CSV dự phòng: %s", os.path.abspath(path))
+        return _blank()
+    try:
+        df = _read_financial_csv(path)
+        if df.empty:
+            raise ValueError("CSV rỗng")
+        df = _coerce_csv_metric(df)
+        t = _find_column(df, TICKER_KEYS)
+        if t is None:
+            raise ValueError("CSV thiếu cột ticker/symbol")
+        df = df[df[t].astype(str).str.strip().str.upper() == symbol]
+        q = _find_column(df, QUARTER_KEYS)
+        if report_type == "year" and q is not None:
+            df = df[pd.to_numeric(_col(df, q), errors="coerce") == 4]
+        return to_tidy(df.reset_index(drop=True), report_type)
+    except Exception as err:
+        log.warning("%s: đọc CSV dự phòng lỗi: %s", symbol, err)
+        return _blank()
+
+
+# ---- Gộp + chuẩn hóa ----
+def get_financials(symbol: str, report_type: str = "quarter", max_periods: int = MAX_FINANCE_PERIODS,
+                   csv_path: str | None = None) -> pd.DataFrame:
+    symbol = validate_symbol(symbol)
+    if report_type not in ("quarter", "year"):
+        raise ValueError("report_type phải là 'quarter' hoặc 'year'")
+
+    vn, vn_err = fetch_financial_vnstock(symbol, report_type)
+    vn = vn.set_index("period")
+    bk = load_csv_backup(symbol, report_type, csv_path).set_index("period")
+
+    merged = vn.combine_first(bk)[METRICS]
+    if report_type == "quarter":
+        merged = merged[merged.index.astype(str).str.contains("-Q")]
+    latest = max([_default_anchor(report_type), *merged.index], key=_period_key)
+    merged = merged.reindex(_expected_periods(latest, max_periods, report_type))
+    merged.index.name = "period"
+
+    has = merged[METRICS].notna().any(axis=1)
+    vn_part = vn.reindex(merged.index)[METRICS]
+    filled = (vn_part.isna() & merged.notna()).any(axis=1)
+    merged["source"] = ["none" if not h else "csv" if not v else "vnstock+csv" if f else "vnstock"
+                        for h, v, f in zip(has, vn_part.notna().any(axis=1), filled)]
+    merged["status"] = ["MISSING" if not h else "OK" if a else "PARTIAL"
+                        for h, a in zip(has, merged[METRICS].notna().all(axis=1))]
+
+    merged = merged.reset_index()
+    for m, digits in METRIC_DIGITS.items():
+        merged[m] = merged[m].astype(float).round(digits)
+    merged["symbol"], merged["period_type"] = symbol, report_type
+    return merged[FIN_COLUMNS]
+
+
+def get_financials_many(symbols: list[str], report_type: str = "quarter", max_periods: int = MAX_FINANCE_PERIODS,
+                        csv_path: str | None = None, pause: float = REQUEST_PAUSE) -> pd.DataFrame:
+    frames = []
+    for i, sym in enumerate(symbols):
+        try:
+            frames.append(get_financials(sym, report_type, max_periods, csv_path))
+        except BaseException as err:
+            log.warning("%s: %s", sym, err)
+        if pause > 0 and i < len(symbols) - 1:
+            _rate_limit_sleep(max(REQUEST_PAUSE, float(pause)))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=FIN_COLUMNS)
+
+
+# ==============================================================================
+# KIỂM TRA CHẤT LƯỢNG DỮ LIỆU
+# ==============================================================================
+def check_data(prices: pd.DataFrame | None = None, fin: pd.DataFrame | None = None,
+               expected: list[str] | None = None, since_quarter: str = "2024-Q1") -> None:
+    if prices is not None:
+        print("=== GIÁ ===")
+        if prices.empty:
+            print("Không có dòng giá nào.")
+        else:
+            g = prices.groupby("symbol").agg(so_nen=("time", "size"), tu=("time", "min"), den=("time", "max"), nguon=("source", "first"))
+            print(g.to_string())
+            print(f"Dòng trùng (symbol, resolution, time): {int(prices.duplicated(['symbol', 'resolution', 'time']).sum())}"
+                  f" | nguồn lạ/giả: {sorted(set(prices['source']) - KNOWN_SOURCES) or 'không'}")
+        if expected:
+            absent = [s for s in expected if s not in set(prices.get("symbol", []))]
+            print("Mã CHƯA có giá:", absent or "không")
+    if fin is not None:
+        print("=== BCTC ===")
+        if fin.empty:
+            print("Không có dòng BCTC nào.")
+        else:
+            rows = []
+            for (sym, kind), g in fin.groupby(["symbol", "period_type"], sort=False):
+                st = g["status"].value_counts()
+                scope = g[g["period"].map(_period_key) >= _period_key(since_quarter)] if kind == "quarter" else g
+                rows.append({"symbol": sym, "type": kind, "OK": st.get("OK", 0), "PARTIAL": st.get("PARTIAL", 0),
+                             "MISSING": st.get("MISSING", 0), "sources": "/".join(sorted(set(g["source"]) - {"none"})) or "-",
+                             "missing_periods": ",".join(scope.loc[scope["status"] == "MISSING", "period"]) or "-"})
+            print(pd.DataFrame(rows).fillna("").to_string(index=False))
+            print(f"Dòng trùng (symbol, period_type, period): {int(fin.duplicated(['symbol', 'period_type', 'period']).sum())}"
+                  f" | nguồn lạ/giả: {sorted(set(fin['source']) - KNOWN_SOURCES) or 'không'}")
+        if expected:
+            absent = [s for s in expected if s not in set(fin.get("symbol", []))]
+            print("Mã CHƯA có trong BCTC:", absent or "không")
+#tầng 1
+# ============================================================
+# TẦNG 1 - GROWTH QUALITY FILTER
+# ============================================================
+# Flow:
+# 1. Danh sách 30 mã
+# 2. Phân loại ngành: BANK / SECURITIES / INSURANCE / OTHER
+# 3. Lấy BCTC 10 quý gần nhất từ DNSE.py
+# 4. Tính:
+#       - Net Profit TTM
+#       - Equity Average
+#       - Profit Growth YoY
+#       - ROE TTM
+# 5. Quality Filter
+#       - Profit Growth YoY >= 15%
+#       - ROE TTM >= 10%
+# 6. Test một số mã
+# 7. Xuất danh sách PASS cho Tầng 2
+# ============================================================
+
+import os
+import re
+import time
+import numpy as np
+import pandas as pd
+
+
+# ============================================================
+# 1. CẤU HÌNH
+# ============================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+OUTPUT_DIR = os.path.join(
+    BASE_DIR,
+    "output"
+)
+
+os.makedirs(
+    OUTPUT_DIR,
+    exist_ok=True
+)
+
+OUTPUT_CSV = os.path.join(
+    OUTPUT_DIR,
+    "tier1_results.csv"
+)
+
+TIER1_PASS_CSV = os.path.join(
+    OUTPUT_DIR,
+    "tier1_pass_symbols.csv"
+)
+
+# Ngưỡng Quality Filter
+MIN_PROFIT_GROWTH = 0.15
+MIN_ROE_TTM = 0.10
+
+# Số quý cần lấy
+MAX_PERIODS = 10
+
+# ------------------------------------------------------------
+# 30 mã dùng chung toàn hệ thống
+# ------------------------------------------------------------
+
+SYMBOLS = [
+    "ACB", "BID", "CMG", "CTG", "FPT",
+    "FRT", "GAS", "GMD", "HCM", "HPG",
+    "HSG", "KDH", "MBB", "MSN", "MWG",
+    "NKG", "NLG", "PLX", "PNJ", "POW",
+    "REE", "SAB", "SSI", "TCB", "VCB",
+    "VCI", "VHM", "VIC", "VND", "VNM"
+]
+
+
+# ============================================================
+# 2. PHÂN LOẠI NHÓM NGÀNH
+# ============================================================
+
+SECTOR_MAP = {
+
+    # Ngân hàng
+    "ACB": "BANK",
+    "BID": "BANK",
+    "CTG": "BANK",
+    "MBB": "BANK",
+    "TCB": "BANK",
+    "VCB": "BANK",
+
+    # Chứng khoán
+    "HCM": "SECURITIES",
+    "SSI": "SECURITIES",
+    "VCI": "SECURITIES",
+    "VND": "SECURITIES",
+
+    # Bảo hiểm
+    # Hiện tại 30 mã không có mã bảo hiểm.
+    # Có thể bổ sung khi mở rộng universe.
+    "BVH": "INSURANCE",
+
+    # Còn lại
+    "CMG": "OTHER",
+    "FPT": "OTHER",
+    "FRT": "OTHER",
+    "GAS": "OTHER",
+    "GMD": "OTHER",
+    "HPG": "OTHER",
+    "HSG": "OTHER",
+    "KDH": "OTHER",
+    "MSN": "OTHER",
+    "MWG": "OTHER",
+    "NKG": "OTHER",
+    "NLG": "OTHER",
+    "PLX": "OTHER",
+    "PNJ": "OTHER",
+    "POW": "OTHER",
+    "REE": "OTHER",
+    "SAB": "OTHER",
+    "VHM": "OTHER",
+    "VIC": "OTHER",
+    "VNM": "OTHER"
+}
+
+
+# ============================================================
+# 3. HÀM CHUYỂN NUMERIC
+# ============================================================
+
+def to_numeric(series):
+
+    return pd.to_numeric(
+        series,
+        errors="coerce"
+    )
+
+
+# ============================================================
+# 4. CHUẨN HÓA ROE
+# ============================================================
+
+def normalize_roe(series):
+
+    s = to_numeric(series)
+
+    valid = s.dropna()
+
+    if len(valid) > 0:
+
+        # Ví dụ:
+        # 0.1633 -> giữ nguyên
+        # 16.33  -> chuyển thành 0.1633
+        if valid.abs().median() > 1:
+            s = s / 100
+
+    return s
+
+
+# ============================================================
+# 5. LẤY BCTC TỪ DNSE.PY
+# ============================================================
+
+def load_financial_data():
+
+    print("=" * 70)
+    print("LẤY DỮ LIỆU BCTC CHO TẦNG 1")
+    print("=" * 70)
+
+    print(
+        f"Số cổ phiếu: {len(SYMBOLS)}"
+    )
+
+    print(
+        "Nguồn dữ liệu: DNSE.py"
+    )
+
+    print(
+        f"Số kỳ cần lấy: {MAX_PERIODS} quý gần nhất"
+    )
+
+    print()
+
+    # Kiểm tra DNSE.py
+    if "get_financials" not in globals():
+
+        raise RuntimeError(
+            "Không tìm thấy get_financials(). "
+            "Hãy chạy DNSE.py trước."
+        )
+
+    frames = []
+
+    failed_symbols = []
+
+    # --------------------------------------------------------
+    # Lấy từng mã
+    # --------------------------------------------------------
+
+    for i, symbol in enumerate(
+        SYMBOLS,
+        start=1
+    ):
+
+        print(
+            f"[{i:02d}/{len(SYMBOLS)}] "
+            f"Đang lấy BCTC: {symbol}",
+            flush=True
+        )
+
+        try:
+
+            data = get_financials(
+                symbol,
+                report_type="quarter",
+                max_periods=MAX_PERIODS
+            )
+
+            # Không có dữ liệu
+            if data is None or data.empty:
+
+                print(
+                    "       -> Không có dữ liệu",
+                    flush=True
+                )
+
+                failed_symbols.append(symbol)
+
+                continue
+
+            data = data.copy()
+
+            # Đảm bảo symbol
+            if "symbol" not in data.columns:
+
+                data["symbol"] = symbol
+
+            # Kiểm tra dữ liệu thật
+            valid_profit = (
+                data["profit_after_tax"]
+                .notna()
+                .sum()
+                if "profit_after_tax"
+                in data.columns
+                else 0
+            )
+
+            valid_roe = (
+                data["roe"]
+                .notna()
+                .sum()
+                if "roe" in data.columns
+                else 0
+            )
+
+            print(
+                f"       -> {len(data)} dòng | "
+                f"PAT: {valid_profit} | "
+                f"ROE: {valid_roe}",
+                flush=True
+            )
+
+            frames.append(data)
+
+        except BaseException as e:
+
+            print(
+                f"       -> LỖI: "
+                f"{type(e).__name__}: {e}",
+                flush=True
+            )
+
+            failed_symbols.append(symbol)
+
+        # Nghỉ ngắn giữa các mã
+        # DNSE.py đã có rate-limit nội bộ.
+        if i < len(SYMBOLS):
+
+            time.sleep(0.2)
+
+    # --------------------------------------------------------
+    # Kiểm tra
+    # --------------------------------------------------------
+
+    if not frames:
+
+        raise RuntimeError(
+            "Không lấy được dữ liệu BCTC."
+        )
+
+    df = pd.concat(
+        frames,
+        ignore_index=True
+    )
+
+    print()
+    print("=" * 70)
+    print("KẾT QUẢ LẤY BCTC")
+    print("=" * 70)
+
+    print(
+        f"Tổng số dòng: {len(df)}"
+    )
+
+    print(
+        f"Mã lấy được: "
+        f"{df['symbol'].nunique()}/{len(SYMBOLS)}"
+    )
+
+    if failed_symbols:
+
+        print()
+        print(
+            "Mã lỗi:"
+        )
+
+        print(
+            ", ".join(
+                failed_symbols
+            )
+        )
+
+    return df
+
+
+# ============================================================
+# 6. CHUẨN HÓA DỮ LIỆU
+# ============================================================
+
+def normalize_financial_data(df):
+
+    print()
+    print("=" * 70)
+    print("CHUẨN HÓA DỮ LIỆU BCTC")
+    print("=" * 70)
+
+    df = df.copy()
+
+    required_columns = [
+        "symbol",
+        "period_type",
+        "period",
+        "roe",
+        "profit_after_tax"
+    ]
+
+    missing = [
+        col
+        for col in required_columns
+        if col not in df.columns
+    ]
+
+    if missing:
+
+        raise ValueError(
+            f"Thiếu cột: {missing}\n"
+            f"Cột hiện có: "
+            f"{df.columns.tolist()}"
+        )
+
+    # --------------------------------------------------------
+    # Symbol
+    # --------------------------------------------------------
+
+    df["symbol"] = (
+        df["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    # --------------------------------------------------------
+    # Chỉ lấy quarterly
+    # --------------------------------------------------------
+
+    df = df[
+        df["period_type"]
+        .astype(str)
+        .str.lower()
+        .eq("quarter")
+    ].copy()
+
+    # --------------------------------------------------------
+    # ROE
+    # --------------------------------------------------------
+
+    df["roe"] = normalize_roe(
+        df["roe"]
+    )
+
+    # --------------------------------------------------------
+    # Profit
+    # --------------------------------------------------------
+
+    df["profit_after_tax"] = to_numeric(
+        df["profit_after_tax"]
+    )
+
+    # --------------------------------------------------------
+    # Period YYYY-Qn
+    # --------------------------------------------------------
+
+    def normalize_period(value):
+
+        if pd.isna(value):
+
+            return np.nan
+
+        text = (
+            str(value)
+            .strip()
+            .upper()
+        )
+
+        match = re.search(
+            r"(\d{4})\D*Q?(\d)",
+            text
+        )
+
+        if not match:
+
+            return np.nan
+
+        year = int(
+            match.group(1)
+        )
+
+        quarter = int(
+            match.group(2)
+        )
+
+        if quarter not in [1, 2, 3, 4]:
+
+            return np.nan
+
+        return (
+            f"{year}-Q{quarter}"
+        )
+
+    df["period"] = (
+        df["period"]
+        .apply(normalize_period)
+    )
+
+    # --------------------------------------------------------
+    # Year / Quarter
+    # --------------------------------------------------------
+
+    df["year"] = pd.to_numeric(
+        df["period"].str[:4],
+        errors="coerce"
+    )
+
+    df["quarter"] = pd.to_numeric(
+        df["period"].str[-1],
+        errors="coerce"
+    )
+
+    df["period_number"] = (
+        df["year"] * 4
+        + df["quarter"]
+    )
+
+    # --------------------------------------------------------
+    # Chỉ giữ universe
+    # --------------------------------------------------------
+
+    df = df[
+        df["symbol"].isin(SYMBOLS)
+    ].copy()
+
+    # --------------------------------------------------------
+    # Loại dòng không có PAT
+    # --------------------------------------------------------
+
+    df = df.dropna(
+        subset=[
+            "symbol",
+            "period",
+            "year",
+            "quarter",
+            "profit_after_tax"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Loại duplicate
+    # --------------------------------------------------------
+
+    df = (
+        df.sort_values(
+            [
+                "symbol",
+                "period_number"
+            ]
+        )
+        .drop_duplicates(
+            subset=[
+                "symbol",
+                "year",
+                "quarter"
+            ],
+            keep="last"
+        )
+    )
+
+    df = df.reset_index(
+        drop=True
+    )
+
+    print(
+        f"Số dòng sau chuẩn hóa: "
+        f"{len(df)}"
+    )
+
+    print(
+        f"Số mã có dữ liệu: "
+        f"{df['symbol'].nunique()}/"
+        f"{len(SYMBOLS)}"
+    )
+
+    return df
+
+
+# ============================================================
+# 7. TÍNH NET PROFIT TTM
+# ============================================================
+
+def calculate_net_profit_ttm(df):
+
+    df = df.copy()
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "period_number"
+        ]
+    )
+
+    # Tổng lợi nhuận 4 quý gần nhất
+    df["net_profit_ttm"] = (
+        df.groupby("symbol")[
+            "profit_after_tax"
+        ]
+        .transform(
+            lambda s:
+            s.rolling(
+                window=4,
+                min_periods=4
+            ).sum()
+        )
+    )
+
+    return df
+
+
+# ============================================================
+# 8. TÍNH PROFIT GROWTH YOY
+# ============================================================
+
+def calculate_profit_growth_yoy(df):
+
+    df = df.copy()
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "period_number"
+        ]
+    )
+
+    # Cùng quý năm trước
+    df["profit_after_tax_prev_year"] = (
+        df.groupby("symbol")[
+            "profit_after_tax"
+        ].shift(4)
+    )
+
+    # --------------------------------------------------------
+    # Profit Growth YoY
+    # --------------------------------------------------------
+
+    df["profit_growth_yoy"] = np.where(
+
+        (
+            df[
+                "profit_after_tax_prev_year"
+            ].notna()
+            &
+            (
+                df[
+                    "profit_after_tax_prev_year"
+                ] > 0
+            )
+        ),
+
+        (
+            (
+                df["profit_after_tax"]
+                -
+                df[
+                    "profit_after_tax_prev_year"
+                ]
+            )
+            /
+            df[
+                "profit_after_tax_prev_year"
+            ].abs()
+        ),
+
+        np.nan
+    )
+
+    return df
+
+
+# ============================================================
+# 9. TÍNH EQUITY AVERAGE
+# ============================================================
+
+def calculate_equity_average(df):
+
+    df = df.copy()
+
+    # --------------------------------------------------------
+    # Kiểm tra equity có trong dữ liệu không
+    # --------------------------------------------------------
+
+    equity_columns = [
+        "equity",
+        "total_equity",
+        "shareholders_equity"
+    ]
+
+    equity_col = None
+
+    for col in equity_columns:
+
+        if col in df.columns:
+
+            equity_col = col
+            break
+
+    # --------------------------------------------------------
+    # Nếu DNSE.py chưa trả equity
+    # --------------------------------------------------------
+
+    if equity_col is None:
+
+        print()
+        print(
+            "⚠️ Không tìm thấy cột equity "
+            "trong dữ liệu BCTC."
+        )
+
+        print(
+            "Equity Average sẽ để NaN."
+        )
+
+        df["equity_average"] = np.nan
+
+        return df
+
+    # --------------------------------------------------------
+    # Numeric
+    # --------------------------------------------------------
+
+    df[equity_col] = to_numeric(
+        df[equity_col]
+    )
+
+    # --------------------------------------------------------
+    # Equity Average
+    # --------------------------------------------------------
+
+    df["equity_average"] = (
+        df.groupby("symbol")[
+            equity_col
+        ]
+        .transform(
+            lambda s:
+            (
+                s
+                +
+                s.shift(1)
+            ) / 2
+        )
+    )
+
+    return df
+
+
+# ============================================================
+# 10. TÍNH ROE TTM
+# ============================================================
+
+def calculate_roe_ttm(df):
+
+    df = df.copy()
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "period_number"
+        ]
+    )
+
+    # ROE TTM theo trung bình 4 quý
+    df["roe_ttm"] = (
+        df.groupby("symbol")[
+            "roe"
+        ]
+        .transform(
+            lambda s:
+            s.rolling(
+                window=4,
+                min_periods=4
+            ).mean()
+        )
+    )
+
+    return df
+
+
+# ============================================================
+# 11. QUALITY FILTER
+# ============================================================
+
+def evaluate_quality(df):
+
+    print()
+    print("=" * 70)
+    print("QUALITY FILTER")
+    print("=" * 70)
+
+    df = df.copy()
+
+    # --------------------------------------------------------
+    # Quý mới nhất
+    # --------------------------------------------------------
+
+    latest = (
+        df.sort_values(
+            [
+                "symbol",
+                "period_number"
+            ]
+        )
+        .groupby(
+            "symbol",
+            as_index=False
+        )
+        .tail(1)
+        .copy()
+    )
+
+    # --------------------------------------------------------
+    # Số quý
+    # --------------------------------------------------------
+
+    quarter_count = (
+        df.groupby("symbol")[
+            "period"
+        ]
+        .nunique()
+        .rename(
+            "quarter_count"
+        )
+    )
+
+    latest = latest.merge(
+        quarter_count,
+        on="symbol",
+        how="left"
+    )
+
+    # --------------------------------------------------------
+    # Điều kiện Profit Growth
+    # --------------------------------------------------------
+
+    latest[
+        "profit_growth_pass"
+    ] = (
+        latest[
+            "profit_growth_yoy"
+        ]
+        >= MIN_PROFIT_GROWTH
+    )
+
+    # --------------------------------------------------------
+    # Điều kiện ROE
+    # --------------------------------------------------------
+
+    latest[
+        "roe_pass"
+    ] = (
+        latest["roe_ttm"]
+        >= MIN_ROE_TTM
+    )
+
+    # --------------------------------------------------------
+    # Quality PASS
+    # --------------------------------------------------------
+
+    latest[
+        "quality_pass"
+    ] = (
+        latest[
+            "profit_growth_pass"
+        ]
+        &
+        latest[
+            "roe_pass"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Sector
+    # --------------------------------------------------------
+
+    latest["sector"] = (
+        latest["symbol"]
+        .map(SECTOR_MAP)
+        .fillna("OTHER")
+    )
+
+    # --------------------------------------------------------
+    # Sắp xếp
+    # --------------------------------------------------------
+
+    latest = latest.sort_values(
+        [
+            "quality_pass",
+            "symbol"
+        ],
+        ascending=[
+            False,
+            True
+        ]
+    )
+
+    return latest.reset_index(
+        drop=True
+    )
+
+
+# ============================================================
+# 12. TEST CÔNG THỨC
+# ============================================================
+
+def test_symbols(
+    results,
+    test_list=None
+):
+
+    if test_list is None:
+
+        test_list = [
+            "ACB",
+            "FPT",
+            "VIC"
+        ]
+
+    print()
+    print("=" * 70)
+    print("TEST CÔNG THỨC TẦNG 1")
+    print("=" * 70)
+
+    for symbol in test_list:
+
+        row = results[
+            results["symbol"]
+            == symbol
+        ]
+
+        if row.empty:
+
+            print(
+                f"{symbol}: "
+                "KHÔNG CÓ DỮ LIỆU"
+            )
+
+            continue
+
+        row = row.iloc[0]
+
+        print()
+        print(
+            f"--- {symbol} ---"
+        )
+
+        print(
+            f"Sector               : "
+            f"{row['sector']}"
+        )
+
+        print(
+            f"Period               : "
+            f"{row['period']}"
+        )
+
+        print(
+            f"Net Profit TTM       : "
+            f"{row['net_profit_ttm']}"
+        )
+
+        print(
+            f"Profit Growth YoY    : "
+            f"{row['profit_growth_yoy']:.2%}"
+            if pd.notna(
+                row["profit_growth_yoy"]
+            )
+            else
+            "Profit Growth YoY    : NaN"
+        )
+
+        print(
+            f"ROE TTM              : "
+            f"{row['roe_ttm']:.2%}"
+            if pd.notna(
+                row["roe_ttm"]
+            )
+            else
+            "ROE TTM              : NaN"
+        )
+
+        print(
+            f"Profit Growth PASS   : "
+            f"{row['profit_growth_pass']}"
+        )
+
+        print(
+            f"ROE PASS             : "
+            f"{row['roe_pass']}"
+        )
+
+        print(
+            f"QUALITY PASS         : "
+            f"{row['quality_pass']}"
+        )
+
+
+# ============================================================
+# 13. XUẤT DANH SÁCH PASS CHO TẦNG 2
+# ============================================================
+
+def save_tier1_pass(results):
+
+    pass_df = results[
+        results["quality_pass"]
+    ].copy()
+
+    # Chỉ cần danh sách mã cho Tầng 2
+    pass_symbols = (
+        pass_df[
+            [
+                "symbol",
+                "sector",
+                "period"
+            ]
+        ]
+        .sort_values("symbol")
+    )
+
+    pass_symbols.to_csv(
+        TIER1_PASS_CSV,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    return pass_symbols
+
+
+# ============================================================
+# 14. IN KẾT QUẢ
+# ============================================================
+
+def print_results(results):
+
+    print()
+    print("=" * 70)
+    print("KẾT QUẢ TẦNG 1")
+    print("=" * 70)
+
+    total = len(results)
+
+    passed = int(
+        results["quality_pass"]
+        .sum()
+    )
+
+    failed = (
+        total
+        -
+        passed
+    )
+
+    print(
+        f"Tổng số mã : {total}"
+    )
+
+    print(
+        f"PASS       : {passed}"
+    )
+
+    print(
+        f"FAIL       : {failed}"
+    )
+
+    print()
+    print(
+        "Điều kiện:"
+    )
+
+    print(
+        f"- Profit Growth YoY >= "
+        f"{MIN_PROFIT_GROWTH:.0%}"
+    )
+
+    print(
+        f"- ROE TTM >= "
+        f"{MIN_ROE_TTM:.0%}"
+    )
+
+    # --------------------------------------------------------
+    # Danh sách PASS
+    # --------------------------------------------------------
+
+    print()
+    print("-" * 70)
+    print("CÁC MÃ VƯỢT QUA TẦNG 1")
+    print("-" * 70)
+
+    pass_df = results[
+        results["quality_pass"]
+    ]
+
+    if pass_df.empty:
+
+        print(
+            "Không có mã nào vượt qua Tầng 1."
+        )
+
+    else:
+
+        columns = [
+            "symbol",
+            "sector",
+            "period",
+            "net_profit_ttm",
+            "profit_growth_yoy",
+            "roe_ttm",
+            "quality_pass"
+        ]
+
+        display_df = pass_df[
+            columns
+        ].copy()
+
+        print(
+            display_df.to_string(
+                index=False
+            )
+        )
+
+
+# ============================================================
+# 15. MAIN
+# ============================================================
+def save_results(df, path):
+    import os
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False, encoding="utf-8-sig")
+    print(f"Đã xuất file thành công tại: {path}")
+
+def main():
+
+    print("=" * 100)
+    print("TẦNG 1 - GROWTH QUALITY FILTER")
+    print("=" * 100)
+
+    print(
+        "Nguồn dữ liệu: DNSE.py"
+    )
+
+    print(
+        f"Profit Growth YoY >= "
+        f"{MIN_PROFIT_GROWTH:.0%}"
+    )
+
+    print(
+        f"ROE TTM >= "
+        f"{MIN_ROE_TTM:.0%}"
+    )
+
+    print("=" * 100)
+
+    # --------------------------------------------------------
+    # Bước 1
+    # --------------------------------------------------------
+
+    df = load_financial_data()
+
+    # --------------------------------------------------------
+    # Bước 2
+    # --------------------------------------------------------
+
+    df = normalize_financial_data(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Kiểm tra dữ liệu
+    # --------------------------------------------------------
+
+    if df.empty:
+
+        raise ValueError(
+            "Sau khi chuẩn hóa không còn dữ liệu. "
+            "Kiểm tra Filedata.csv / DNSE.py."
+        )
+
+    # --------------------------------------------------------
+    # Bước 3
+    # --------------------------------------------------------
+
+    df = calculate_net_profit_ttm(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 4
+    # --------------------------------------------------------
+
+    df = calculate_profit_growth_yoy(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 5
+    # --------------------------------------------------------
+
+    df = calculate_equity_average(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 6
+    # --------------------------------------------------------
+
+    df = calculate_roe_ttm(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 7
+    # --------------------------------------------------------
+
+    results = evaluate_quality(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 8
+    # --------------------------------------------------------
+
+    test_symbols(
+        results,
+        [
+            "ACB",
+            "FPT",
+            "VIC"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Bước 9
+    # --------------------------------------------------------
+
+    save_results(
+        results,
+        OUTPUT_CSV
+    )
+
+    # --------------------------------------------------------
+    # Bước 10
+    # --------------------------------------------------------
+
+    pass_symbols = save_tier1_pass(
+        results
+    )
+
+    # --------------------------------------------------------
+    # Bước 11
+    # --------------------------------------------------------
+
+    print_results(
+        results
+    )
+
+    print()
+    print("=" * 70)
+    print("DANH SÁCH CHUYỂN SANG TẦNG 2")
+    print("=" * 70)
+
+    if pass_symbols.empty:
+
+        print(
+            "Không có mã nào chuyển sang Tầng 2."
+        )
+
+    else:
+
+        print(
+            pass_symbols.to_string(
+                index=False
+            )
+        )
+
+    print()
+    print(
+        f"Đã lưu toàn bộ kết quả: "
+        f"{OUTPUT_CSV}"
+    )
+
+    print(
+        f"Đã lưu danh sách PASS: "
+        f"{TIER1_PASS_CSV}"
+    )
+
+    print()
+    print("=" * 100)
+    print("TẦNG 1 HOÀN TẤT")
+    print("=" * 100)
+
+    return results
+
+
+# ============================================================
+# 16. CHẠY TẦNG 1
+# ============================================================
+
+results_tier1 = main()
+
+# ============================================================
+# TẦNG 2 - DAILY FILTER
+# ============================================================
+# Input:
+#   output/tier1_pass_symbols.csv
+#
+# Điều kiện:
+#   1. Return 6M
+#   2. RS Percentile >= 60
+#   3. VN-Index > SMA200 => Bullish
+#
+# Output:
+#   output/layer2_daily_results.csv
+#   output/layer2_pass_symbols.csv
+# ============================================================
+
+import os
+import numpy as np
+import pandas as pd
+from datetime import date, timedelta
+
+import DNSE
+
+
+# ============================================================
+# 1. CẤU HÌNH
+# ============================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+OUTPUT_DIR = os.path.join(
+    BASE_DIR,
+    "output"
+)
+
+TIER1_FILE = os.path.join(
+    OUTPUT_DIR,
+    "tier1_pass_symbols.csv"
+)
+
+OUTPUT_FILE = os.path.join(
+    OUTPUT_DIR,
+    "layer2_daily_results.csv"
+)
+
+PASS_FILE = os.path.join(
+    OUTPUT_DIR,
+    "layer2_pass_symbols.csv"
+)
+
+INDEX_SYMBOL = "VNINDEX"
+
+RS_THRESHOLD = 60
+
+SMA_PERIOD = 200
+
+# Khoảng dữ liệu:
+# cần đủ > 200 phiên cho SMA200
+START_DATE = date.today() - timedelta(
+    days=450
+)
+
+END_DATE = date.today()
+
+
+# ============================================================
+# 2. ĐỌC DANH SÁCH TẦNG 1
+# ============================================================
+
+def load_tier1_symbols():
+
+    print("=" * 70)
+    print("ĐỌC DANH SÁCH TẦNG 1")
+    print("=" * 70)
+
+    if not os.path.exists(TIER1_FILE):
+
+        raise FileNotFoundError(
+            f"Không tìm thấy:\n{TIER1_FILE}\n\n"
+            "Hãy chạy Tầng 1 trước."
+        )
+
+    tier1 = pd.read_csv(
+        TIER1_FILE
+    )
+
+    if "symbol" not in tier1.columns:
+
+        raise ValueError(
+            "tier1_pass_symbols.csv "
+            "không có cột symbol."
+        )
+
+    symbols = (
+        tier1["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+        .drop_duplicates()
+        .tolist()
+    )
+
+    print(
+        f"Số mã PASS Tầng 1: "
+        f"{len(symbols)}"
+    )
+
+    print(
+        "Danh sách:"
+    )
+
+    print(
+        ", ".join(symbols)
+    )
+
+    return symbols
+
+
+# ============================================================
+# 3. CHUẨN HÓA DỮ LIỆU GIÁ
+# ============================================================
+
+def normalize_prices(df):
+
+    df = df.copy()
+
+    required = [
+        "symbol",
+        "time",
+        "close"
+    ]
+
+    missing = [
+        c for c in required
+        if c not in df.columns
+    ]
+
+    if missing:
+
+        raise ValueError(
+            f"Thiếu cột giá: {missing}"
+        )
+
+    df["symbol"] = (
+        df["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    df["time"] = pd.to_datetime(
+        df["time"],
+        errors="coerce"
+    )
+
+    df["close"] = pd.to_numeric(
+        df["close"],
+        errors="coerce"
+    )
+
+    df = df.dropna(
+        subset=[
+            "symbol",
+            "time",
+            "close"
+        ]
+    )
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "time"
+        ]
+    )
+
+    df = df.drop_duplicates(
+        subset=[
+            "symbol",
+            "time"
+        ],
+        keep="last"
+    )
+
+    return df
+
+
+# ============================================================
+# 4. TÍNH RETURN 6 THÁNG
+# ============================================================
+
+def calculate_return_6m(stock_df):
+
+    stock_df = stock_df.copy()
+
+    stock_df = stock_df.sort_values(
+        [
+            "symbol",
+            "time"
+        ]
+    )
+
+    # Khoảng 126 phiên giao dịch
+    stock_df["close_6m_ago"] = (
+        stock_df
+        .groupby("symbol")["close"]
+        .shift(126)
+    )
+
+    stock_df["return_6m"] = (
+        stock_df["close"]
+        /
+        stock_df["close_6m_ago"]
+        - 1
+    )
+
+    return stock_df
+
+
+# ============================================================
+# 5. TÍNH RS PERCENTILE
+# ============================================================
+
+def calculate_rs_percentile(
+    latest_df
+):
+
+    latest_df = latest_df.copy()
+
+    valid = latest_df[
+        latest_df["return_6m"]
+        .notna()
+    ].copy()
+
+    if valid.empty:
+
+        latest_df[
+            "rs_percentile"
+        ] = np.nan
+
+        return latest_df
+
+    # Percentile rank trong universe
+    valid[
+        "rs_percentile"
+    ] = (
+        valid["return_6m"]
+        .rank(
+            pct=True,
+            method="average"
+        )
+        * 100
+    )
+
+    latest_df = latest_df.drop(
+        columns=[
+            "rs_percentile"
+        ],
+        errors="ignore"
+    )
+
+    latest_df = latest_df.merge(
+        valid[
+            [
+                "symbol",
+                "rs_percentile"
+            ]
+        ],
+        on="symbol",
+        how="left"
+    )
+
+    return latest_df
+
+
+# ============================================================
+# 6. TÍNH VN-INDEX SMA200
+# ============================================================
+
+def calculate_market_regime(
+    index_df
+):
+
+    index_df = index_df.copy()
+
+    index_df = index_df.sort_values(
+        "time"
+    )
+
+    index_df["vn_sma200"] = (
+        index_df["close"]
+        .rolling(
+            window=SMA_PERIOD,
+            min_periods=SMA_PERIOD
+        )
+        .mean()
+    )
+
+    index_df[
+        "market_regime"
+    ] = np.where(
+        index_df["close"]
+        >
+        index_df["vn_sma200"],
+        "Bullish",
+        "Non-Bullish"
+    )
+
+    return index_df
+
+
+# ============================================================
+# 7. MAIN
+# ============================================================
+
+def run_layer2():
+
+    print()
+    print("=" * 70)
+    print("LAYER 2 - DAILY FILTER")
+    print("=" * 70)
+
+    print(
+        "Nguồn dữ liệu: DNSE.py"
+    )
+
+    print(
+        f"RS threshold: >= {RS_THRESHOLD}"
+    )
+
+    print(
+        f"SMA Market: {SMA_PERIOD}"
+    )
+
+    print(
+        f"Start date: {START_DATE}"
+    )
+
+    print(
+        f"End date: {END_DATE}"
+    )
+
+    # --------------------------------------------------------
+    # Bước 1: Tầng 1
+    # --------------------------------------------------------
+
+    symbols = load_tier1_symbols()
+
+    if len(symbols) == 0:
+
+        raise ValueError(
+            "Tầng 1 không có mã PASS."
+        )
+
+    # --------------------------------------------------------
+    # Bước 2: lấy Daily
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+    print("LẤY DỮ LIỆU DAILY")
+    print("=" * 70)
+
+    all_symbols = (
+        symbols
+        +
+        [INDEX_SYMBOL]
+    )
+
+    raw = DNSE.collect_prices(
+        all_symbols,
+        resolution="1D",
+        start=START_DATE,
+        end=END_DATE,
+        source="dnse",
+        indexes=[
+            INDEX_SYMBOL
+        ]
+    )
+
+    if raw is None or raw.empty:
+
+        raise RuntimeError(
+            "DNSE không trả về dữ liệu Daily."
+        )
+
+    print(
+        f"Raw rows: {len(raw):,}"
+    )
+
+    # --------------------------------------------------------
+    # Bước 3: chuẩn hóa
+    # --------------------------------------------------------
+
+    prices = normalize_prices(
+        raw
+    )
+
+    # --------------------------------------------------------
+    # Tách stock / index
+    # --------------------------------------------------------
+
+    stock_df = prices[
+        prices["symbol"]
+        .isin(symbols)
+    ].copy()
+
+    index_df = prices[
+        prices["symbol"]
+        ==
+        INDEX_SYMBOL
+    ].copy()
+
+    print(
+        f"Stock rows : {len(stock_df):,}"
+    )
+
+    print(
+        f"VNINDEX rows: {len(index_df):,}"
+    )
+
+    print(
+        f"Mã có dữ liệu: "
+        f"{stock_df['symbol'].nunique()}/"
+        f"{len(symbols)}"
+    )
+
+    # --------------------------------------------------------
+    # Bước 4: Return 6M
+    # --------------------------------------------------------
+
+    stock_df = calculate_return_6m(
+        stock_df
+    )
+
+    # --------------------------------------------------------
+    # Bước 5: lấy phiên mới nhất
+    # --------------------------------------------------------
+
+    latest_stock = (
+        stock_df
+        .sort_values(
+            [
+                "symbol",
+                "time"
+            ]
+        )
+        .groupby(
+            "symbol",
+            as_index=False
+        )
+        .tail(1)
+        .copy()
+    )
+
+    # --------------------------------------------------------
+    # Bước 6: RS Percentile
+    # --------------------------------------------------------
+
+    latest_stock = (
+        calculate_rs_percentile(
+            latest_stock
+        )
+    )
+
+    # --------------------------------------------------------
+    # Bước 7: VN-Index / SMA200
+    # --------------------------------------------------------
+
+    index_df = (
+        calculate_market_regime(
+            index_df
+        )
+    )
+
+    latest_index = (
+        index_df
+        .sort_values("time")
+        .tail(1)
+        .iloc[0]
+    )
+
+    vn_index = (
+        latest_index["close"]
+    )
+
+    vn_sma200 = (
+        latest_index["vn_sma200"]
+    )
+
+    market_regime = (
+        latest_index[
+            "market_regime"
+        ]
+    )
+
+    latest_time = (
+        latest_index["time"]
+    )
+
+    # --------------------------------------------------------
+    # Bước 8: điều kiện Tầng 2
+    # --------------------------------------------------------
+
+    latest_stock[
+        "market_regime"
+    ] = market_regime
+
+    latest_stock[
+        "vn_index"
+    ] = vn_index
+
+    latest_stock[
+        "vn_sma200"
+    ] = vn_sma200
+
+    # RS >= 60
+    latest_stock[
+        "rs_pass"
+    ] = (
+        latest_stock[
+            "rs_percentile"
+        ]
+        >= RS_THRESHOLD
+    )
+
+    # Bullish
+    latest_stock[
+        "regime_pass"
+    ] = (
+        latest_stock[
+            "market_regime"
+        ]
+        ==
+        "Bullish"
+    )
+
+    # Tầng 2 PASS
+    latest_stock[
+        "layer2_pass"
+    ] = (
+        latest_stock["rs_pass"]
+        &
+        latest_stock[
+            "regime_pass"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Bước 9: lưu
+    # --------------------------------------------------------
+
+    output_columns = [
+        "symbol",
+        "time",
+        "close",
+        "close_6m_ago",
+        "return_6m",
+        "rs_percentile",
+        "vn_index",
+        "vn_sma200",
+        "market_regime",
+        "rs_pass",
+        "regime_pass",
+        "layer2_pass"
+    ]
+
+    latest_stock[
+        output_columns
+    ].to_csv(
+        OUTPUT_FILE,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    # --------------------------------------------------------
+    # Danh sách PASS
+    # --------------------------------------------------------
+
+    pass_df = latest_stock[
+        latest_stock[
+            "layer2_pass"
+        ]
+    ].copy()
+
+    pass_df[
+        [
+            "symbol",
+            "time",
+            "close",
+            "return_6m",
+            "rs_percentile",
+            "market_regime"
+        ]
+    ].to_csv(
+        PASS_FILE,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    # --------------------------------------------------------
+    # Bước 10: kết quả
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+    print("LAYER 2 HOÀN TẤT")
+    print("=" * 70)
+
+    print(
+        f"Ngày dữ liệu : "
+        f"{latest_time}"
+    )
+
+    print(
+        f"VN-Index     : "
+        f"{vn_index:.2f}"
+    )
+
+    print(
+        f"SMA200       : "
+        f"{vn_sma200:.2f}"
+        if pd.notna(vn_sma200)
+        else
+        "SMA200       : NaN"
+    )
+
+    print(
+        f"Regime       : "
+        f"{market_regime}"
+    )
+
+    print(
+        f"RS threshold : >= {RS_THRESHOLD}"
+    )
+
+    print(
+        f"Layer 2 PASS : "
+        f"{len(pass_df)}/{len(symbols)}"
+    )
+
+    print()
+    print(
+        "CÁC MÃ LAYER 2 PASS:"
+    )
+
+    if pass_df.empty:
+
+        print(
+            "Không có mã nào PASS."
+        )
+
+    else:
+
+        show_columns = [
+            "symbol",
+            "close",
+            "return_6m",
+            "rs_percentile",
+            "market_regime"
+        ]
+
+        print(
+            pass_df[
+                show_columns
+            ]
+            .sort_values(
+                "rs_percentile",
+                ascending=False
+            )
+            .to_string(
+                index=False
+            )
+        )
+
+    print()
+    print(
+        f"Đã lưu: {OUTPUT_FILE}"
+    )
+
+    print(
+        f"Đã lưu PASS: {PASS_FILE}"
+    )
+
+    print("=" * 70)
+
+    return latest_stock
+
+
+# ============================================================
+# 8. CHẠY
+# ============================================================
+
+layer2_results = run_layer2()
+
+
+# ============================================================
+# TẦNG 3 - INTRADAY MOMENTUM TRIGGER
+# ============================================================
+# Input:
+#   output/layer2_pass_symbols.csv
+#
+# Logic:
+#   1. EMA20 > EMA50                  -> +1
+#   2. Volume >= Volume MA20
+#      AND Close > Previous Close     -> +1
+#
+# Momentum Score: 0 - 2
+# Layer 3 PASS: Score = 2
+#
+# Volume MA20:
+#   Trung bình volume của 20 nến 15 phút
+#   có dữ liệu TRƯỚC nến hiện tại.
+#
+# Output:
+#   output/layer3_intraday_results.csv
+#   output/layer3_pass_symbols.csv
+# ============================================================
+
+import os
+import numpy as np
+import pandas as pd
+from datetime import date, timedelta
+
+import DNSE
+
+
+# ============================================================
+# 1. CẤU HÌNH
+# ============================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+OUTPUT_DIR = os.path.join(
+    BASE_DIR,
+    "output"
+)
+
+LAYER2_FILE = os.path.join(
+    OUTPUT_DIR,
+    "layer2_pass_symbols.csv"
+)
+
+OUTPUT_FILE = os.path.join(
+    OUTPUT_DIR,
+    "layer3_intraday_results.csv"
+)
+
+PASS_FILE = os.path.join(
+    OUTPUT_DIR,
+    "layer3_pass_symbols.csv"
+)
+
+RESOLUTION = "15"
+
+EMA_FAST = 20
+EMA_SLOW = 50
+
+VOLUME_MA_PERIOD = 20
+
+MOMENTUM_THRESHOLD = 2
+
+# Lấy đủ dữ liệu để EMA50 ổn định
+START_DATE = date.today() - timedelta(
+    days=60
+)
+
+END_DATE = date.today()
+
+
+# ============================================================
+# 2. ĐỌC DANH SÁCH TẦNG 2
+# ============================================================
+
+def load_layer2_symbols():
+
+    print("=" * 70)
+    print("ĐỌC DANH SÁCH TẦNG 2")
+    print("=" * 70)
+
+    if not os.path.exists(
+        LAYER2_FILE
+    ):
+
+        raise FileNotFoundError(
+            f"Không tìm thấy:\n"
+            f"{LAYER2_FILE}\n\n"
+            "Hãy chạy Tầng 2 trước."
+        )
+
+    layer2 = pd.read_csv(
+        LAYER2_FILE
+    )
+
+    if "symbol" not in layer2.columns:
+
+        raise ValueError(
+            "layer2_pass_symbols.csv "
+            "không có cột symbol."
+        )
+
+    symbols = (
+        layer2["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+        .drop_duplicates()
+        .tolist()
+    )
+
+    print(
+        f"Số mã PASS Tầng 2: "
+        f"{len(symbols)}"
+    )
+
+    print(
+        "Danh sách:"
+    )
+
+    print(
+        ", ".join(symbols)
+    )
+
+    return symbols
+
+
+# ============================================================
+# 3. CHUẨN HÓA DỮ LIỆU 15 PHÚT
+# ============================================================
+
+def normalize_prices(df):
+
+    df = df.copy()
+
+    required = [
+        "symbol",
+        "time",
+        "close",
+        "volume"
+    ]
+
+    missing = [
+        col
+        for col in required
+        if col not in df.columns
+    ]
+
+    if missing:
+
+        raise ValueError(
+            f"Thiếu cột: {missing}"
+        )
+
+    df["symbol"] = (
+        df["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    df["time"] = pd.to_datetime(
+        df["time"],
+        errors="coerce"
+    )
+
+    df["close"] = pd.to_numeric(
+        df["close"],
+        errors="coerce"
+    )
+
+    df["volume"] = pd.to_numeric(
+        df["volume"],
+        errors="coerce"
+    )
+
+    df = df.dropna(
+        subset=[
+            "symbol",
+            "time",
+            "close",
+            "volume"
+        ]
+    )
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "time"
+        ]
+    )
+
+    df = df.drop_duplicates(
+        subset=[
+            "symbol",
+            "time"
+        ],
+        keep="last"
+    )
+
+    return df.reset_index(
+        drop=True
+    )
+
+
+# ============================================================
+# 4. TÍNH EMA20 / EMA50
+# ============================================================
+
+def calculate_ema(df):
+
+    df = df.copy()
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "time"
+        ]
+    )
+
+    df["ema20"] = (
+        df.groupby("symbol")[
+            "close"
+        ]
+        .transform(
+            lambda s:
+            s.ewm(
+                span=EMA_FAST,
+                adjust=False
+            ).mean()
+        )
+    )
+
+    df["ema50"] = (
+        df.groupby("symbol")[
+            "close"
+        ]
+        .transform(
+            lambda s:
+            s.ewm(
+                span=EMA_SLOW,
+                adjust=False
+            ).mean()
+        )
+    )
+
+    return df
+
+
+# ============================================================
+# 5. TÍNH PREVIOUS CLOSE
+# ============================================================
+
+def calculate_previous_close(df):
+
+    df = df.copy()
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "time"
+        ]
+    )
+
+    df["previous_close"] = (
+        df.groupby("symbol")[
+            "close"
+        ].shift(1)
+    )
+
+    return df
+
+
+# ============================================================
+# 6. TÍNH VOLUME MA20
+# ============================================================
+#
+# Volume MA20 =
+# trung bình 20 nến 15 phút TRƯỚC nến hiện tại.
+#
+# Không dùng volume của nến hiện tại.
+#
+# Không reset theo phiên.
+#
+# Do đó:
+# nếu đầu phiên chưa đủ 20 nến,
+# cửa sổ có thể chứa nến của phiên trước.
+#
+# ============================================================
+
+def calculate_volume_ma20(df):
+
+    df = df.copy()
+
+    df = df.sort_values(
+        [
+            "symbol",
+            "time"
+        ]
+    )
+
+    # Volume của chính nến trước
+    df["previous_volume"] = (
+        df.groupby("symbol")[
+            "volume"
+        ].shift(1)
+    )
+
+    # Trung bình 20 volume trước đó
+    df["volume_ma20"] = (
+        df.groupby("symbol")[
+            "previous_volume"
+        ]
+        .transform(
+            lambda s:
+            s.rolling(
+                window=VOLUME_MA_PERIOD,
+                min_periods=VOLUME_MA_PERIOD
+            ).mean()
+        )
+    )
+
+    return df
+
+
+# ============================================================
+# 7. TÍNH MOMENTUM SCORE
+# ============================================================
+
+def calculate_momentum_score(df):
+
+    df = df.copy()
+
+    # --------------------------------------------------------
+    # Điều kiện 1:
+    # EMA20 > EMA50
+    # --------------------------------------------------------
+
+    df["ema_condition"] = (
+        df["ema20"]
+        >
+        df["ema50"]
+    )
+
+    # --------------------------------------------------------
+    # Điều kiện 2:
+    # Volume >= MA20
+    # AND Close > Previous Close
+    # --------------------------------------------------------
+
+    df["volume_price_condition"] = (
+        (
+            df["volume"]
+            >=
+            df["volume_ma20"]
+        )
+        &
+        (
+            df["close"]
+            >
+            df["previous_close"]
+        )
+    )
+
+    # --------------------------------------------------------
+    # Score
+    # --------------------------------------------------------
+
+    df["momentum_score"] = (
+        df["ema_condition"]
+        .astype(int)
+        +
+        df[
+            "volume_price_condition"
+        ].astype(int)
+    )
+
+    # --------------------------------------------------------
+    # Layer 3 PASS
+    # --------------------------------------------------------
+
+    df["layer3_pass"] = (
+        df["momentum_score"]
+        >= MOMENTUM_THRESHOLD
+    )
+
+    return df
+
+
+# ============================================================
+# 8. MAIN
+# ============================================================
+
+def run_layer3():
+
+    print()
+    print("=" * 70)
+    print("LAYER 3 - INTRADAY MOMENTUM TRIGGER")
+    print("=" * 70)
+
+    print(
+        "Nguồn dữ liệu: DNSE.py"
+    )
+
+    print(
+        f"Resolution: {RESOLUTION} phút"
+    )
+
+    print(
+        f"EMA: {EMA_FAST}/{EMA_SLOW}"
+    )
+
+    print(
+        f"Volume MA: "
+        f"{VOLUME_MA_PERIOD} nến trước"
+    )
+
+    print(
+        f"Momentum threshold: "
+        f"{MOMENTUM_THRESHOLD}"
+    )
+
+    print(
+        f"Start date: {START_DATE}"
+    )
+
+    print(
+        f"End date: {END_DATE}"
+    )
+
+    # --------------------------------------------------------
+    # Bước 1: lấy danh sách Tầng 2
+    # --------------------------------------------------------
+
+    symbols = load_layer2_symbols()
+
+    if not symbols:
+
+        raise ValueError(
+            "Tầng 2 không có mã PASS."
+        )
+
+    # --------------------------------------------------------
+    # Bước 2: lấy dữ liệu 15 phút
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+    print("LẤY DỮ LIỆU 15 PHÚT")
+    print("=" * 70)
+
+    raw = DNSE.collect_prices(
+        symbols,
+        resolution=RESOLUTION,
+        start=START_DATE,
+        end=END_DATE,
+        source="dnse",
+        indexes=[]
+    )
+
+    if raw is None or raw.empty:
+
+        raise RuntimeError(
+            "DNSE không trả dữ liệu 15 phút."
+        )
+
+    print(
+        f"Raw 15M rows: "
+        f"{len(raw):,}"
+    )
+
+    # --------------------------------------------------------
+    # Bước 3: chuẩn hóa
+    # --------------------------------------------------------
+
+    df = normalize_prices(
+        raw
+    )
+
+    print(
+        f"Mã có dữ liệu: "
+        f"{df['symbol'].nunique()}/"
+        f"{len(symbols)}"
+    )
+
+    # --------------------------------------------------------
+    # Bước 4: EMA
+    # --------------------------------------------------------
+
+    df = calculate_ema(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 5: Previous Close
+    # --------------------------------------------------------
+
+    df = calculate_previous_close(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 6: Volume MA20
+    # --------------------------------------------------------
+
+    df = calculate_volume_ma20(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 7: Momentum Score
+    # --------------------------------------------------------
+
+    df = calculate_momentum_score(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Bước 8: lấy nến mới nhất của từng mã
+    # --------------------------------------------------------
+
+    latest = (
+        df
+        .sort_values(
+            [
+                "symbol",
+                "time"
+            ]
+        )
+        .groupby(
+            "symbol",
+            as_index=False
+        )
+        .tail(1)
+        .copy()
+    )
+
+    latest = latest.sort_values(
+        [
+            "layer3_pass",
+            "momentum_score",
+            "symbol"
+        ],
+        ascending=[
+            False,
+            False,
+            True
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Bước 9: lưu toàn bộ kết quả
+    # --------------------------------------------------------
+
+    output_columns = [
+        "symbol",
+        "time",
+        "close",
+        "ema20",
+        "ema50",
+        "volume",
+        "volume_ma20",
+        "previous_close",
+        "ema_condition",
+        "volume_price_condition",
+        "momentum_score",
+        "layer3_pass"
+    ]
+
+    latest[
+        output_columns
+    ].to_csv(
+        OUTPUT_FILE,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    # --------------------------------------------------------
+    # Bước 10: danh sách PASS
+    # --------------------------------------------------------
+
+    pass_df = latest[
+        latest["layer3_pass"]
+    ].copy()
+
+    pass_df[
+        [
+            "symbol",
+            "time",
+            "close",
+            "ema20",
+            "ema50",
+            "volume",
+            "volume_ma20",
+            "momentum_score",
+            "layer3_pass"
+        ]
+    ].to_csv(
+        PASS_FILE,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    # --------------------------------------------------------
+    # Bước 11: kiểm tra dữ liệu
+    # --------------------------------------------------------
+
+    volume_ma_available = (
+        latest["volume_ma20"]
+        .notna()
+    )
+
+    print()
+    print("=" * 70)
+    print("LAYER 3 HOÀN TẤT")
+    print("=" * 70)
+
+    print(
+        f"Nến mới nhất toàn hệ thống: "
+        f"{latest['time'].max()}"
+    )
+
+    print(
+        f"Mã có Volume MA20: "
+        f"{volume_ma_available.sum()}/"
+        f"{len(latest)}"
+    )
+
+    print(
+        f"Layer 3 PASS: "
+        f"{len(pass_df)}/{len(latest)}"
+    )
+
+    print()
+    print("KẾT QUẢ TỪNG MÃ:")
+
+    show_columns = [
+        "symbol",
+        "time",
+        "close",
+        "ema20",
+        "ema50",
+        "volume",
+        "volume_ma20",
+        "previous_close",
+        "momentum_score",
+        "layer3_pass"
+    ]
+
+    print(
+        latest[
+            show_columns
+        ].to_string(
+            index=False
+        )
+    )
+
+    print()
+    print("=" * 70)
+    print("CÁC MÃ LAYER 3 PASS")
+    print("=" * 70)
+
+    if pass_df.empty:
+
+        print(
+            "Không có mã nào PASS Tầng 3."
+        )
+
+    else:
+
+        print(
+            pass_df[
+                [
+                    "symbol",
+                    "time",
+                    "close",
+                    "ema20",
+                    "ema50",
+                    "volume",
+                    "volume_ma20",
+                    "momentum_score"
+                ]
+            ].to_string(
+                index=False
+            )
+        )
+
+    print()
+    print(
+        f"Đã lưu: {OUTPUT_FILE}"
+    )
+
+    print(
+        f"Đã lưu PASS: {PASS_FILE}"
+    )
+
+    print("=" * 70)
+
+    return latest
+
+
+# ============================================================
+# 9. CHẠY
+# ============================================================
+
+layer3_results = run_layer3()
+===== tang4_atr_risk.py =====
+"""
+tang4_atr_risk.py — Tầng 4: Dynamic ATR Risk Management + Backtest
+Chiến lược: Regime-Adaptive Quality Momentum & Dynamic ATR Sizing
+
+Nguyên tắc: làm ĐÚNG như tài liệu chiến lược của nhóm; backtest PHÁT LẠI từng nến 15 phút thật
+theo thứ tự thời gian, giống cách bot chạy thật (mỗi nến mới: kiểm tra Stop, chốt lời, thoát xu hướng).
+
+THEO TÀI LIỆU
+  - ATR14 = MA14(TR) trên dữ liệu DAILY, chỉ dùng đến phiên trước ngày tín hiệu.
+  - Stop Loss = Entry − 2×ATR14; số cổ phiếu = Vốn×Risk% / (2×ATR14), làm tròn theo lô 100.
+  - Giá vào lệnh = giá mở cửa nến 15 phút kế tiếp sau nến tín hiệu (tài liệu: open_15m dùng cho Entry/backtest).
+  - Chốt 50% khi giá đạt Entry + 4×ATR14; 50% còn lại trailing stop 2×ATR14 từ đỉnh.
+  - Thứ tự ưu tiên thoát: S1 (ATR Stop) → chốt lời/trailing → S2 (Trend Exit) → S3 (Fundamental Exit).
+
+TÀI LIỆU KHÔNG NÓI RÕ (đã chọn cách đọc sát nhất; đều có tham số để đổi)
+  - Khóa bán T+2: TẮT (sellable_from=0). Phí/thuế: 0 (fee, sell_tax). Bật khi muốn kịch bản thực tế.
+  - S2 = EMA20 < EMA50 trong 2 nến 15 phút liên tiếp (công thức trong bản dán bị mất, cần đối chiếu tài liệu gốc).
+  - Trong cùng một nến chạm cả Stop và mức chốt lời thì tính Stop trước; gap qua mức nào thì khớp giá mở cửa.
+  - Chốt 50% làm tròn xuống lô 100; nếu vị thế < 2 lô thì chốt toàn bộ tại +4×ATR.
+
+Dữ liệu: giá phải tính bằng ĐỒNG (không phải nghìn đồng), cùng đơn vị với vốn.
+"""
+from __future__ import annotations
+
+import os
+import warnings
+
+import numpy as np
+import pandas as pd
+
+LOT = 100
+
+
+# ---------------------------------------------------------------- 4.1 – 4.2 ATR
+def true_range(df: pd.DataFrame) -> pd.Series:
+    prev_close = df["close"].shift(1)
+    return pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - prev_close).abs(),
+            (df["low"] - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+
+def atr14(df: pd.DataFrame, period: int = 14, method: str = "sma") -> pd.Series:
+    tr = true_range(df)
+    if method == "wilder":
+        return tr.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    return tr.rolling(period).mean()
+
+
+# ---------------------------------------------------- 4.3 – 4.4 Stop & Position Sizing
+def stop_and_size(entry, atr, capital, risk_pct=0.01, k=2.0, lot=LOT):
+    """StopLoss = Entry − k×ATR; Shares = Capital×Risk% / RiskPerShare (làm tròn xuống lô)."""
+    if not np.isfinite(atr) or atr <= 0:
+        return None
+    stop = entry - k * atr
+    if stop <= 0:
+        return None
+    risk_per_share = entry - stop
+    raw = capital * risk_pct / risk_per_share
+    shares = int(raw // lot) * lot
+    shares = min(shares, int((capital // entry) // lot) * lot)  # không vượt số vốn có
+    return {
+        "stop_loss": stop,
+        "risk_per_share": risk_per_share,
+        "raw_shares": raw,
+        "shares": shares,
+    }
+
+
+# ------------------------------------------------------------ Mô phỏng 1 giao dịch
+def simulate_trade(
+    ticker,
+    entry_time,
+    entry_price,
+    daily: pd.DataFrame,
+    capital=100_000_000,
+    risk_pct=0.01,
+    k=2.0,
+    tp_mult=4.0,
+    sellable_from=0,
+    atr_method="sma",
+    exit_flags: pd.Series | None = None,  # index = date, giá trị = lý do (S2/S3), NaN = không thoát
+    fee=0.0,
+    sell_tax=0.0,
+):
+    if entry_price < 1000:
+        warnings.warn(f"{ticker}: giá {entry_price} có vẻ tính theo nghìn đồng, hãy nhân 1000.")
+
+    d = daily.sort_values("date").reset_index(drop=True).copy()
+    d["date"] = pd.to_datetime(d["date"])
+    d["atr"] = atr14(d, method=atr_method)
+
+    entry_date = pd.Timestamp(entry_time).normalize()
+    idx = d.index[d["date"].dt.normalize() == entry_date]
+    if len(idx) == 0 or idx[0] == 0:
+        return None
+    i0 = idx[0]
+
+    atr = d.loc[i0 - 1, "atr"]  # ATR đến phiên trước tín hiệu
+    sz = stop_and_size(entry_price, atr, capital, risk_pct, k)
+    if sz is None or sz["shares"] <= 0:
+        return None
+
+    shares = sz["shares"]
+    stop = sz["stop_loss"]
+    tp = entry_price + tp_mult * atr
+    remaining, partial, peak = shares, False, entry_price
+    fills, last_j = [], i0  # (date, qty, price, reason)
+
+    for j in range(i0, len(d)):
+        bar, age = d.loc[j], j - i0
+        last_j = j
+        if age >= sellable_from:
+            # S1 — ATR Stop / Trailing Stop (ưu tiên cao nhất)
+            eff_stop = max(stop, peak - k * atr) if partial else stop
+            if bar["low"] <= eff_stop:
+                px = min(bar["open"], eff_stop)
+                fills.append((bar["date"], remaining, px, "Trailing Stop" if partial else "ATR Stop"))
+                remaining = 0
+                break
+            # Chốt lời tại +4×ATR
+            if (not partial) and bar["high"] >= tp:
+                px = max(bar["open"], tp)
+                qty = int((remaining * 0.5) // LOT) * LOT
+                if qty == 0:
+                    fills.append((bar["date"], remaining, px, "Take Profit (toàn bộ)"))
+                    remaining = 0
+                    break
+                fills.append((bar["date"], qty, px, "Take Profit 50%"))
+                remaining -= qty
+                partial = True
+            # S2 / S3 — thoát theo tín hiệu từ tầng khác, khớp giá đóng cửa
+            if exit_flags is not None and bar["date"] in exit_flags.index and pd.notna(exit_flags[bar["date"]]):
+                fills.append((bar["date"], remaining, bar["close"], str(exit_flags[bar["date"]])))
+                remaining = 0
+                break
+        peak = max(peak, bar["high"])
+
+    if remaining > 0:  # hết dữ liệu mà vẫn còn vị thế → tất toán theo giá đóng cửa cuối
+        fills.append((d.loc[last_j, "date"], remaining, d.loc[last_j, "close"], "End of data"))
+
+    cost = shares * entry_price * (1 + fee)
+    proceeds = sum(q * p * (1 - fee - sell_tax) for _, q, p, _ in fills)
+    pnl = proceeds - cost
+    planned_risk = shares * sz["risk_per_share"]
+    return {
+        "ticker": ticker,
+        "entry_date": d.loc[i0, "date"],
+        "entry_price": entry_price,
+        "atr14": atr,
+        "stop_loss": stop,
+        "take_profit": tp,
+        "shares": shares,
+        "exit_date": fills[-1][0],
+        "exit_reason": fills[-1][3],
+        "hold_days": last_j - i0,
+        "pnl": pnl,
+        "return_pct": pnl / cost,
+        "r_multiple": pnl / planned_risk,
+        "n_fills": len(fills),
+    }
+
+
+# ------------------------------------------------------------------- Backtest
+def simulate_trade_15m(
+    ticker,
+    entry_time,
+    entry_price,
+    bars: pd.DataFrame,
+    daily: pd.DataFrame,
+    capital=100_000_000,
+    risk_pct=0.01,
+    k=2.0,
+    tp_mult=4.0,
+    sellable_from=0,
+    atr_method="sma",
+    use_s2=True,
+    exit_flags: pd.Series | None = None,  # S3: index = ngày, giá trị = lý do; thoát ở nến cuối ngày đó
+    fee=0.0,
+    sell_tax=0.0,
+):
+    """Phát lại từng nến 15 phút của MỘT mã kể từ nến vào lệnh, như bot chạy thật.
+    bars cần cột: time, open, high, low, close, ema20, ema50 (đầu ra Tầng 3)."""
+    b = bars.sort_values("time").reset_index(drop=True)
+    b["time"] = pd.to_datetime(b["time"])
+    entry_time = pd.Timestamp(entry_time)
+    hit = b.index[b["time"] == entry_time]
+    if len(hit) == 0:
+        return None
+    i0 = hit[0]
+
+    d = daily.sort_values("date").reset_index(drop=True).copy()
+    d["atr"] = atr14(d, method=atr_method)
+    prior = d[d["date"] < entry_time.normalize()]
+    if prior.empty:
+        return None
+    atr = prior["atr"].iloc[-1]
+    sz = stop_and_size(entry_price, atr, capital, risk_pct, k)
+    if sz is None or sz["shares"] <= 0:
+        return None
+
+    shares, stop = sz["shares"], sz["stop_loss"]
+    tp = entry_price + tp_mult * atr
+    days = b["time"].dt.normalize()
+    day_rank = {dt: n for n, dt in enumerate(sorted(days.unique()))}
+    remaining, partial, peak, below = shares, False, entry_price, 0
+    fills, last_j = [], i0
+
+    for j in range(i0, len(b)):
+        bar = b.iloc[j]
+        last_j = j
+        age = day_rank[days.iloc[j]] - day_rank[days.iloc[i0]]
+        can_sell = age >= sellable_from
+        if can_sell:
+            # S1 — ATR Stop / Trailing Stop
+            eff_stop = max(stop, peak - k * atr) if partial else stop
+            if bar["low"] <= eff_stop:
+                px = min(bar["open"], eff_stop)
+                fills.append((bar["time"], remaining, px, "Trailing Stop" if partial else "ATR Stop"))
+                remaining = 0
+                break
+            # Chốt lời 50% tại +4×ATR
+            if (not partial) and bar["high"] >= tp:
+                px = max(bar["open"], tp)
+                qty = int((remaining * 0.5) // LOT) * LOT
+                if qty == 0:
+                    fills.append((bar["time"], remaining, px, "Take Profit (toàn bộ)"))
+                    remaining = 0
+                    break
+                fills.append((bar["time"], qty, px, "Take Profit 50%"))
+                remaining -= qty
+                partial = True
+        # S2 — Trend Exit: EMA20 < EMA50 trong 2 nến liên tiếp, bán ở giá đóng cửa nến thứ hai
+        below = below + 1 if bar["ema20"] < bar["ema50"] else 0
+        if can_sell and use_s2 and below >= 2:
+            fills.append((bar["time"], remaining, bar["close"], "Trend Exit (S2)"))
+            remaining = 0
+            break
+        # S3 — Fundamental Exit: thoát ở nến cuối của ngày có cờ
+        if can_sell and exit_flags is not None:
+            day = days.iloc[j]
+            last_of_day = j == len(b) - 1 or days.iloc[j + 1] != day
+            if last_of_day and day in exit_flags.index and pd.notna(exit_flags[day]):
+                fills.append((bar["time"], remaining, bar["close"], str(exit_flags[day])))
+                remaining = 0
+                break
+        peak = max(peak, bar["high"])
+
+    if remaining > 0:
+        fills.append((b.loc[last_j, "time"], remaining, b.loc[last_j, "close"], "End of data"))
+
+    cost = shares * entry_price * (1 + fee)
+    proceeds = sum(q * p * (1 - fee - sell_tax) for _, q, p, _ in fills)
+    pnl = proceeds - cost
+    planned_risk = shares * sz["risk_per_share"]
+    return {
+        "ticker": ticker,
+        "entry_date": entry_time,
+        "entry_price": entry_price,
+        "atr14": atr,
+        "stop_loss": stop,
+        "take_profit": tp,
+        "shares": shares,
+        "exit_date": fills[-1][0],
+        "exit_reason": fills[-1][3],
+        "hold_days": day_rank[days.iloc[last_j]] - day_rank[days.iloc[i0]],
+        "pnl": pnl,
+        "return_pct": pnl / cost,
+        "r_multiple": pnl / planned_risk,
+        "n_fills": len(fills),
+    }
+
+
+def run_backtest(
+    signals: pd.DataFrame,
+    daily_by_ticker: dict,
+    capital=100_000_000,
+    risk_pct=0.01,
+    exit_flags_by_ticker: dict | None = None,  # {ticker: Series(date -> lý do S3)}
+    bars15: pd.DataFrame | None = None,  # có -> phát lại theo nến 15 phút (cột symbol, time, OHLC, ema20, ema50)
+    **kw,
+):
+    """Chạy lần lượt các tín hiệu theo thời gian; mỗi mã chỉ giữ 1 vị thế tại một thời điểm.
+    Khối lượng mỗi lệnh tính theo vốn ban đầu (chưa kiểm tra tổng tiền các vị thế mở đồng thời).
+    Có bars15: dùng simulate_trade_15m (khuyến nghị). Không có: dùng simulate_trade trên nến daily."""
+    bars_by = None
+    if bars15 is not None:
+        bars_by = {t: g.sort_values("time").reset_index(drop=True) for t, g in bars15.groupby("symbol")}
+    trades, busy_until = [], {}
+    for s in signals.sort_values("entry_time").itertuples():
+        d = daily_by_ticker.get(s.ticker)
+        if d is None:
+            continue
+        flags = (exit_flags_by_ticker or {}).get(s.ticker)
+        if bars_by is not None:
+            b = bars_by.get(s.ticker)
+            if b is None or (s.ticker in busy_until and pd.Timestamp(s.entry_time) <= busy_until[s.ticker]):
+                continue
+            t = simulate_trade_15m(s.ticker, s.entry_time, s.entry_price, b, d, capital, risk_pct,
+                                   exit_flags=flags, **kw)
+        else:
+            if s.ticker in busy_until and pd.Timestamp(s.entry_time).normalize() <= busy_until[s.ticker]:
+                continue
+            t = simulate_trade(s.ticker, s.entry_time, s.entry_price, d, capital, risk_pct,
+                               exit_flags=flags, **kw)
+        if t:
+            trades.append(t)
+            busy_until[s.ticker] = t["exit_date"]
+    return pd.DataFrame(trades)
+
+
+def performance(trades: pd.DataFrame, capital=100_000_000) -> dict:
+    if trades.empty:
+        return {"n_trades": 0}
+    t = trades.sort_values("exit_date")
+    eq = capital + t.set_index("exit_date")["pnl"].cumsum()
+    eq = pd.concat([pd.Series([capital], index=[t["entry_date"].min()]), eq])
+    years = max((eq.index.max() - eq.index.min()).days / 365.25, 1e-9)
+    total = eq.iloc[-1] / capital - 1
+    gains, losses = t.loc[t.pnl > 0, "pnl"].sum(), -t.loc[t.pnl <= 0, "pnl"].sum()
+    return {
+        "n_trades": len(t),
+        "total_return": total,
+        "CAGR (quy đổi năm, chỉ tham khảo nếu < 1 năm)": (1 + total) ** (1 / years) - 1,
+        "max_drawdown (theo lệnh đã đóng)": (eq / eq.cummax() - 1).min(),
+        "win_rate": (t.pnl > 0).mean(),
+        "profit_factor": gains / losses if losses > 0 else np.inf,
+        "avg_R": t["r_multiple"].mean(),
+        "avg_hold_days": t["hold_days"].mean(),
+    }
+
+
+# --------------------------------------------------- Nạp dữ liệu từ pipeline của nhóm
+def load_daily_from_db(db_path, symbols=None, resolution="1D", price_multiplier=1.0):
+    """Đọc bảng `prices` (market_data.db do API.py tạo) -> {ticker: DataFrame daily}.
+    Đổi tên symbol->ticker, time->date. Nếu nguồn trả giá theo NGHÌN ĐỒNG thì đặt price_multiplier=1000."""
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    try:
+        df = pd.read_sql_query(
+            "SELECT symbol, time, open, high, low, close, volume FROM prices WHERE resolution = ?",
+            conn,
+            params=(resolution,),
+        )
+    finally:
+        conn.close()
+    df = df.rename(columns={"symbol": "ticker", "time": "date"})
+    df["date"] = pd.to_datetime(df["date"]).dt.normalize()
+    if symbols is not None:
+        df = df[df["ticker"].isin({str(s).upper() for s in symbols})]
+    df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]] * price_multiplier
+    return {t: g.sort_values("date").reset_index(drop=True) for t, g in df.groupby("ticker")}
+
+
+def daily_from_frame(df: pd.DataFrame, symbols=None, price_multiplier: float = 1.0) -> dict:
+    """DataFrame giá 1D (đầu ra của DNSE.collect_prices: symbol, time, open, high, low, close, volume)
+    -> {ticker: DataFrame daily có cột date}. Dùng khi dữ liệu lấy trực tiếp từ DNSE.py thay vì SQLite."""
+    d = df.rename(columns={"symbol": "ticker", "time": "date"}).copy()
+    d["ticker"] = d["ticker"].astype(str).str.upper().str.strip()
+    d["date"] = pd.to_datetime(d["date"]).dt.normalize()
+    if symbols is not None:
+        d = d[d["ticker"].isin({str(s).upper() for s in symbols})]
+    cols = ["open", "high", "low", "close"]
+    d[cols] = d[cols].astype(float) * price_multiplier
+    d = d.drop_duplicates(["ticker", "date"], keep="last")
+    return {t: g.sort_values("date").reset_index(drop=True) for t, g in d.groupby("ticker")}
+
+
+def load_universe(csv_path, exclude_sectors=None):
+    """Danh sách mã từ file CSV của các tầng (tier1_pass_symbols.csv, layer2_pass_symbols.csv,
+    layer3_pass_symbols.csv đều có cột `symbol`). Nếu file có cột `sector` thì có thể loại ngành,
+    ví dụ exclude_sectors=["BANK", "SECURITIES", "INSURANCE"]."""
+    df = pd.read_csv(csv_path)
+    if exclude_sectors and "sector" in df.columns:
+        df = df[~df["sector"].astype(str).str.upper().isin({s.upper() for s in exclude_sectors})]
+    return df["symbol"].astype(str).str.upper().str.strip().drop_duplicates().tolist()
+
+
+def build_orders(
+    signals,
+    daily_by_ticker: dict,
+    capital=100_000_000,
+    risk_pct=0.01,
+    k=2.0,
+    tp_mult=4.0,
+    atr_method="sma",
+    enforce_cash=True,
+):
+    """Chế độ chạy thật cho bot: nhận các mã đang BUY của Tầng 3 và trả bảng lệnh Tầng 4.
+    signals = DataFrame hoặc đường dẫn CSV có cột symbol, time, close (như layer3_pass_symbols.csv).
+    ATR14 daily lấy đến phiên TRƯỚC ngày tín hiệu; giá vào lệnh = close của nến tín hiệu.
+    enforce_cash=True: tổng giá trị các lệnh không vượt vốn; xử lý theo thứ tự dòng trong signals,
+    lệnh nào không đủ tiền thì giảm khối lượng (cash_limited=True) hoặc bỏ."""
+    if isinstance(signals, (str, os.PathLike)):
+        signals = pd.read_csv(signals)
+    rows, used = [], 0.0
+    for r in signals.itertuples():
+        sym = str(r.symbol).upper()
+        d = daily_by_ticker.get(sym)
+        if d is None:
+            continue
+        d = d.sort_values("date").reset_index(drop=True).copy()
+        d["atr"] = atr14(d, method=atr_method)
+        prior = d[d["date"] < pd.Timestamp(r.time).normalize()]
+        if prior.empty:
+            continue
+        atr = prior["atr"].iloc[-1]
+        entry = float(r.close)
+        sz = stop_and_size(entry, atr, capital, risk_pct, k)
+        if sz is None or sz["shares"] <= 0:
+            continue
+        shares = sz["shares"]
+        if enforce_cash:
+            room = int(((capital - used) // entry) // LOT) * LOT
+            shares = min(shares, room)
+            if shares <= 0:
+                continue
+        used += shares * entry
+        rows.append(
+            {
+                "symbol": sym,
+                "signal_time": r.time,
+                "entry_price": entry,
+                "atr14_daily": atr,
+                "stop_loss": sz["stop_loss"],
+                "take_profit_4atr": entry + tp_mult * atr,
+                "risk_per_share": sz["risk_per_share"],
+                "shares": shares,
+                "cash_limited": shares < sz["shares"],
+                "risk_capital": capital * risk_pct,
+                "risk_amount": shares * sz["risk_per_share"],
+                "position_value": shares * entry,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def signals_from_layer3(l3: pd.DataFrame, gate: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Chuyển kết quả calculate_layer3() (cần cột symbol, time, open, layer3_pass) thành
+    bảng tín hiệu [ticker, entry_time, entry_price] cho run_backtest.
+
+    - Nến đóng cửa mới biết tín hiệu -> vào lệnh ở giá MỞ CỬA của nến 15 phút kế tiếp của cùng mã.
+    - gate (tuỳ chọn) = DataFrame [symbol, date, ok] gộp từ Tầng 1/2 theo ngày; hàm dùng giá trị của
+      phiên TRƯỚC ngày tín hiệu (không dùng dữ liệu cuối ngày để lọc tín hiệu trong ngày)."""
+    d = l3.sort_values(["symbol", "time"]).copy()
+    d["time"] = pd.to_datetime(d["time"])
+    d["next_time"] = d.groupby("symbol")["time"].shift(-1)
+    d["next_open"] = d.groupby("symbol")["open"].shift(-1)
+    s = d[d["layer3_pass"].astype(bool) & d["next_open"].notna()].copy()
+
+    if gate is not None and not s.empty:
+        g = gate[["symbol", "date", "ok"]].copy()
+        g["date"] = pd.to_datetime(g["date"]).dt.normalize()
+        g = g.sort_values("date")
+        s["sig_date"] = s["time"].dt.normalize()
+        s = pd.merge_asof(
+            s.sort_values("sig_date"), g,
+            left_on="sig_date", right_on="date", by="symbol", allow_exact_matches=False,
+        )
+        s = s[s["ok"].fillna(False).astype(bool)]
+
+    out = s.rename(columns={"symbol": "ticker", "next_time": "entry_time", "next_open": "entry_price"})
+    return out[["ticker", "entry_time", "entry_price"]].sort_values("entry_time").reset_index(drop=True)
+
+
+# ------------------------------------------------------------------- Chạy thử
+if __name__ == "__main__":
+    # 1) Ví dụ trong tài liệu: kỳ vọng shares = 500, stop = 48.000
+    print(stop_and_size(50_000, 1_000, 100_000_000, 0.01))
+
+    # 2) Dữ liệu giả để kiểm tra luồng
+    rng = np.random.default_rng(42)
+    dates = pd.bdate_range("2026-01-01", periods=120)
+    close = 50_000 + np.cumsum(rng.normal(150, 600, len(dates)))
+    df = pd.DataFrame({"ticker": "AAA", "date": dates, "close": close})
+    df["open"] = df["close"].shift(1).fillna(df["close"])
+    df["high"] = df[["open", "close"]].max(axis=1) + rng.uniform(0, 500, len(df))
+    df["low"] = df[["open", "close"]].min(axis=1) - rng.uniform(0, 500, len(df))
+    df["volume"] = 1_000_000
+
+    sig = pd.DataFrame(
+        {
+            "ticker": "AAA",
+            "entry_time": [dates[30] + pd.Timedelta(hours=10), dates[60] + pd.Timedelta(hours=10)],
+            "entry_price": [df.loc[30, "open"], df.loc[60, "open"]],
+        }
+    )
+    tr = run_backtest(sig, {"AAA": df})
+    print(tr.T)
+    print(performance(tr))
+===== financials.csv =====
+symbol,period_type,period,roe,roa,eps,pe,pb,net_margin,debt_to_equity,profit_after_tax,status,source
+ACB,quarter,2024-Q1,0.2297,0.0232,,6.78,1.43,0.4793,8.7244,15815122978688.51,PARTIAL,csv
+ACB,quarter,2024-Q2,0.2285,0.0229,,7.06,1.55,0.4883,9.2908,16417866845574.14,PARTIAL,csv
+ACB,quarter,2024-Q3,0.2171,0.0217,,6.78,1.4,0.4875,8.8586,16250682847243.54,PARTIAL,csv
+ACB,quarter,2024-Q4,0.2175,0.0212,,6.41,1.29,0.501,9.3521,16789767842224.0,PARTIAL,csv
+===== prices_15.csv =====
+symbol,resolution,time,open,high,low,close,volume,source
+ACB,15,2026-09-14 09:15:00,22.05,22.1,22.0,22.05,245700,DNSE
+ACB,15,2026-09-14 09:30:00,22.05,22.05,22.0,22.05,86700,DNSE
+ACB,15,2026-09-14 09:45:00,22.05,22.1,22.0,22.1,170200,DNSE
+ACB,15,2026-09-14 10:00:00,22.1,22.1,22.0,22.05,173600,DNSE
+===== filedata.csv =====
+ticker;year_report;quarter_report;period_date;pe;pb;ps;price_to_cash_flow;ev_to_ebitda;roe;roa;gross_margin;pre_tax_margin;after_tax_margin;debt_to_equity;financial_leverage;current_ratio;quick_ratio;cash_ratio;asset_turnover;market_cap;shares;net_interest_margin;cir;car;casa_ratio;npl;ldr;loans_growth;deposit_growth
+A32;2024;4;;6.7533981719;1.1990841712;0.3647583185;4.1675049593;4.6604822315;0.1772204419;0.0784320184;0.0994945838;0.0628118454;0.0540110785;1.2425332981;1.2425332981;1.3530463528;0.8067823841;0.3773580846;1.4521468672;265200000000.0;6800000.0;0.0;0.0;;;0.0;0.0;0.0;0.0
+A32;2025;4;;4.4244110032;0.9753350362;0.2893773095;-4.0393462308;3.64637076;0.2251526455;0.1030807167;0.1034446392;0.0786711609;0.065404708;1.128366262;1.128366262;1.4322579575;0.8784825728;0.1145141553;1.5760442933;225080000000.0;6800000.0;0.0;0.0;;;0.0;0.0;0.0;0.0
+AAA;2024;1;;12.5080225089;0.8445224647;0.3864648513;2.0394431797;8.2075127527;0.0670065392;0.0321136943;0.0999027891;0.0390209388;0.0325424092;0.9273408861;0.9273408861;1.613742725;1.4365999249;0.5914037315;1.039366994;4625521401600.0;382274496.0;0.0;0.0;;;0.0;0.0;0.0;0.0
+AAA;2024;2;;7.78709072;0.6470358017;0.3017291453;1.4604076709;6.5020387863;0.0839567952;0.0393562604;0.1102880105;0.0485161831;0.0399280516;0.9908038709;0.9908038709;1.7053161764;1.4584152668;0.6064708163;1.0157148388;3608671242240.0;382274496.0;0.0;0.0;;;0.0;0.0;0.0;0.0
