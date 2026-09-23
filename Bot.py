@@ -37,7 +37,9 @@ VN30_SYMBOLS = [
     "FPT", "VCB", "VIC", "VHM", "HPG",
     "MWG", "MSN", "SSI", "VNM", "GAS",
     "MBB", "TCB", "CTG", "ACB", "VPB",
-    "PVT",
+    "PVT", "BID", "BCM", "PLX", "SAB",
+    "SHB", "STB", "VJC", "VRE", "POW",
+    "HDB", "VIB", "GVR", "DGC", "SSB",
 ]
 
 INDUSTRIES = {
@@ -57,7 +59,25 @@ INDUSTRIES = {
     "ACB": "Ngân hàng",
     "VPB": "Ngân hàng",
     "PVT": "Vận tải - Logistics",
+    "BID": "Ngân hàng",
+    "BCM": "Bất động sản",
+    "PLX": "Dầu khí",
+    "SAB": "Thực phẩm",
+    "SHB": "Ngân hàng",
+    "STB": "Ngân hàng",
+    "VJC": "Vận tải - Logistics",
+    "VRE": "Bất động sản",
+    "POW": "Điện",
+    "HDB": "Ngân hàng",
+    "VIB": "Ngân hàng",
+    "GVR": "Cao su",
+    "DGC": "Hóa chất",
+    "SSB": "Ngân hàng",
 }
+
+# Danh sách mã mặc định dùng khi người dùng chưa /subscribe mã nào,
+# để lệnh /portfolio và /sector luôn có dữ liệu để hiển thị.
+DEFAULT_PORTFOLIO_CAPITAL = 10_000_000.0
 
 CACHE_TTL = 300
 CACHE: dict[str, tuple[float, object]] = {}
@@ -109,6 +129,16 @@ def fmt(value, digits: int = 2) -> str:
 
 def percent(value) -> str:
     return f"{number(value) * 100:.1f}%"
+
+
+def price_fmt(value) -> str:
+    """Format giá/chỉ báo dạng giá với 2 chữ số thập phân.
+
+    Trước đây bot dùng fmt(value, 0) cho giá, khiến mọi mức giá bị làm
+    tròn về số nguyên (vd 66.85 -> 67). Hàm này giữ 2 chữ số thập phân
+    để phản ánh đúng bước giá thực tế của cổ phiếu.
+    """
+    return fmt(value, 2)
 
 
 def pass_text(value: bool) -> str:
@@ -683,6 +713,36 @@ def analyze(symbol: str) -> dict:
     }
 
 
+def smart_score(result: dict) -> float:
+    """SmartScore 0-100: điểm tổng hợp dùng để phân bổ tỷ trọng danh mục.
+
+    Không thay thế logic BUY/SELL của 4 tầng — chỉ là một thước đo liên
+    tục (thay vì PASS/FAIL) để so sánh tương đối giữa các mã khi phân bổ
+    vốn ở /portfolio. Trọng số:
+      - Quality (30đ): Profit YoY pass (15) + ROE pass (15)
+      - Daily Trend (25đ): Giá>SMA20 (8) + SMA20>SMA50 (8) + Regime (9)
+      - Momentum (25đ): EMA20>EMA50 (8) + Volume>=MA20 (8) + Giá tăng (9)
+      - Relative Strength (20đ): RS Percentile / 100 * 20
+    """
+    quality = result["quality"]
+    score = 0.0
+
+    score += 15.0 if quality["profit_pass"] else 0.0
+    score += 15.0 if quality["roe_pass"] else 0.0
+
+    score += 8.0 if result["close"] > result["sma20"] else 0.0
+    score += 8.0 if result["sma20"] > result["sma50"] else 0.0
+    score += 9.0 if result["regime"] else 0.0
+
+    score += 8.0 if result["ema20"] > result["ema50"] else 0.0
+    score += 8.0 if result["volume"] >= result["volume_ma20"] else 0.0
+    score += 9.0 if result["close"] > result["previous_close"] else 0.0
+
+    score += max(0.0, min(100.0, result["rs_percentile"])) / 100 * 20
+
+    return round(score, 1)
+
+
 def rsi_description(rsi: float) -> str:
     if rsi >= 70:
         return "quá mua, dễ rung lắc hoặc điều chỉnh"
@@ -757,13 +817,13 @@ def quick_text(result: dict) -> str:
         f"📊 {result['symbol']}\n"
         f"🏭 Ngành: {result['industry']}\n"
         f"📅 Ngày kiểm tra: {result['date']}\n"
-        f"💰 Giá đóng cửa: {fmt(result['close'], 0)}\n\n"
+        f"💰 Giá đóng cửa: {price_fmt(result['close'])}\n\n"
 
         "📈 CHỈ BÁO CHÍNH\n"
-        f"• EMA20: {fmt(result['ema20'], 0)}\n"
-        f"• EMA50: {fmt(result['ema50'], 0)}\n"
-        f"• SMA20: {fmt(result['sma20'], 0)}\n"
-        f"• SMA50: {fmt(result['sma50'], 0)}\n"
+        f"• EMA20: {price_fmt(result['ema20'])}\n"
+        f"• EMA50: {price_fmt(result['ema50'])}\n"
+        f"• SMA20: {price_fmt(result['sma20'])}\n"
+        f"• SMA50: {price_fmt(result['sma50'])}\n"
         f"• RSI14: {fmt(rsi, 1)} "
         f"(tham khảo – {rsi_description(rsi)})\n"
         f"• MACD: {fmt(result['macd'], 2)} "
@@ -772,17 +832,17 @@ def quick_text(result: dict) -> str:
         f"({stoch_status})\n"
         f"• Volume: {fmt(result['volume'], 0)}\n"
         f"• Volume MA20: {fmt(result['volume_ma20'], 0)}\n"
-        f"• ATR14: {fmt(result['atr14'], 0)}\n\n"
+        f"• ATR14: {price_fmt(result['atr14'])}\n\n"
 
         f"🟩 Vùng mua tham khảo: "
-        f"{fmt(result['buy_low'], 0)} – "
-        f"{fmt(result['buy_high'], 0)}\n"
+        f"{price_fmt(result['buy_low'])} – "
+        f"{price_fmt(result['buy_high'])}\n"
         f"🟥 Vùng bán/kháng cự: "
-        f"{fmt(result['bb_upper'], 0)}\n"
+        f"{price_fmt(result['bb_upper'])}\n"
         f"🛡 Stop Loss: "
-        f"{fmt(result['stop_loss'], 0)}\n"
+        f"{price_fmt(result['stop_loss'])}\n"
         f"🎯 Mục tiêu gần: "
-        f"{fmt(result['target'], 0)}\n\n"
+        f"{price_fmt(result['target'])}\n\n"
 
         "🧩 KẾT QUẢ 4 TẦNG\n"
         f"1️⃣ QUALITY / CƠ BẢN: "
@@ -808,7 +868,7 @@ def detail_text(result: dict) -> str:
         f"🧩 CHI TIẾT 4 TẦNG: {result['symbol']}\n"
         f"🏭 Ngành: {result['industry']}\n"
         f"📅 Ngày kiểm tra: {result['date']}\n"
-        f"💰 Giá đóng cửa: {fmt(result['close'], 0)}\n\n"
+        f"💰 Giá đóng cửa: {price_fmt(result['close'])}\n\n"
 
         f"1️⃣ QUALITY / CƠ BẢN: "
         f"{pass_text(result['layer1'])}\n"
@@ -836,24 +896,148 @@ def detail_text(result: dict) -> str:
         f"{pass_text(result['ema20'] > result['ema50'])}\n"
         f"├ Volume ≥ MA20: "
         f"{pass_text(result['volume'] >= result['volume_ma20'])}\n"
-        f"├ Giá tăng: "
-        f"{pass_text(result['close'] > result['previous_close'])}\n"
-        f"├ MACD: {fmt(result['macd'], 2)} | "
-        f"Signal: {fmt(result['macd_signal'], 2)}\n"
-        f"└ RSI14: {fmt(result['rsi14'], 1)} "
-        f"(tham khảo) – "
-        f"{rsi_description(result['rsi14'])}\n\n"
+        f"└ Giá tăng: "
+        f"{pass_text(result['close'] > result['previous_close'])}\n\n"
 
         f"4️⃣ RISK / ATR: "
         f"{pass_text(result['layer4'])}\n"
-        f"├ ATR14 phiên trước: {fmt(result['atr14'], 0)}\n"
-        f"├ Stop Loss: {fmt(result['stop_loss'], 0)}\n"
-        f"└ Target: {fmt(result['target'], 0)}\n\n"
+        f"├ ATR14 phiên trước: {price_fmt(result['atr14'])}\n"
+        f"├ Stop Loss: {price_fmt(result['stop_loss'])}\n"
+        f"└ Target: {price_fmt(result['target'])}\n\n"
 
         f"🏁 KẾT LUẬN: {conclusion}\n"
-        f"🧠 Lí do: {reason}\n\n"
+        f"🧠 Lí do: {reason}\n"
+        "ℹ️ MACD/RSI14 chi tiết xem ở nút \"📊 Chỉ báo\".\n\n"
         "⚠️ Không phải khuyến nghị đầu tư."
     )
+
+
+def get_watchlist(user_id: str) -> list[str]:
+    data = load_json(SUBSCRIBERS_FILE, {})
+    if not isinstance(data, dict):
+        data = {}
+
+    symbols = data.get(user_id, [])
+    return symbols if isinstance(symbols, list) else []
+
+
+async def analyze_many(symbols: list[str]) -> list[dict]:
+    async def scan(symbol: str):
+        try:
+            return await run_analysis(symbol)
+        except Exception:
+            return None
+
+    results = await asyncio.gather(
+        *(scan(symbol) for symbol in symbols)
+    )
+
+    return [result for result in results if result]
+
+
+def portfolio_text(results: list[dict], capital: float) -> str:
+    if not results:
+        return (
+            "📊 TỐI ƯU DANH MỤC\n\n"
+            "Chưa có mã nào để phân bổ.\n"
+            "Dùng /subscribe <mã> để thêm vào watchlist, "
+            "hoặc /portfolio <vốn> <mã1> <mã2> ..."
+        )
+
+    scored = [
+        (result, smart_score(result))
+        for result in results
+    ]
+
+    total_score = sum(score for _, score in scored) or 1.0
+
+    lines = [
+        "📊 TỐI ƯU DANH MỤC\n",
+        f"💰 Tổng vốn: {fmt(capital, 0)} VNĐ\n",
+        "📌 PHÂN BỔ ĐỀ XUẤT\n",
+    ]
+
+    for result, score in scored:
+        weight = score / total_score
+        conclusion, _ = decision(result)
+
+        lines.append(
+            f"📈 {result['symbol']}\n"
+            f"• Tỷ trọng: {weight * 100:.1f}%\n"
+            f"• Số tiền: {fmt(capital * weight, 0)} VNĐ\n"
+            f"• SmartScore: {fmt(score, 1)}/100\n"
+            f"• Tín hiệu: {conclusion}\n"
+        )
+
+    lines.append(
+        "📌 Phương pháp:\n"
+        "• SmartScore làm điểm cơ sở (Quality, Trend, "
+        "Momentum, Relative Strength)\n"
+        "• Tỷ trọng = SmartScore mã / Tổng SmartScore cả "
+        "danh mục\n"
+        "• Đây là gợi ý tham khảo, không tính đến mức độ rủi ro "
+        "(ATR) hay giới hạn tỷ trọng tối đa mỗi mã.\n\n"
+        "⚠️ Không phải khuyến nghị đầu tư."
+    )
+
+    return "\n".join(lines)
+
+
+def sector_text(results: list[dict]) -> str:
+    if not results:
+        return "🏭 THEO NGÀNH\n\nKhông có mã đủ dữ liệu."
+
+    groups: dict[str, list[dict]] = {}
+
+    for result in results:
+        groups.setdefault(result["industry"], []).append(result)
+
+    bullish = market_regime()
+
+    lines = [
+        "🏭 TÍN HIỆU THEO NGÀNH\n",
+        f"🌡️ Market Regime: "
+        f"{'🟢 Bullish' if bullish else '🔴 Non-Bullish'} "
+        f"(VN-Index so với SMA200)\n",
+    ]
+
+    for industry, items in sorted(
+        groups.items(),
+        key=lambda pair: -sum(
+            smart_score(item) for item in pair[1]
+        ) / len(pair[1]),
+    ):
+        avg_score = sum(
+            smart_score(item) for item in items
+        ) / len(items)
+
+        buy_count = sum(
+            1 for item in items if decision(item)[0].startswith("🟢")
+        )
+
+        lines.append(
+            f"\n📂 {industry} "
+            f"(SmartScore TB: {fmt(avg_score, 1)}, "
+            f"{buy_count}/{len(items)} mã MUA THĂM DÒ)"
+        )
+
+        for item in sorted(
+            items,
+            key=lambda entry: -smart_score(entry),
+        ):
+            conclusion, _ = decision(item)
+            lines.append(
+                f"  {conclusion} {item['symbol']} "
+                f"| SmartScore {fmt(smart_score(item), 1)}"
+            )
+
+    lines.append(
+        "\nℹ️ SmartScore chỉ để so sánh tương đối giữa các mã, "
+        "không phải điểm xác suất thắng.\n"
+        "⚠️ Không phải khuyến nghị đầu tư."
+    )
+
+    return "\n".join(lines)
 
 
 def buttons(symbol: str) -> InlineKeyboardMarkup:
@@ -877,6 +1061,16 @@ def buttons(symbol: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     "📊 Chỉ báo",
                     callback_data=f"indicators:{symbol}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "💼 Danh mục",
+                    callback_data=f"portfolio:{symbol}",
+                ),
+                InlineKeyboardButton(
+                    "🏭 Ngành",
+                    callback_data=f"sector:{symbol}",
                 ),
             ],
         ]
@@ -1039,11 +1233,16 @@ async def start(
         "📌 /check <mã> - tóm tắt một mã\n"
         "🧩 /detail <mã> - xem đủ 4 tầng\n"
         "📈 /chart <mã> - vẽ biểu đồ kỹ thuật\n"
-        "📋 /signals - quét danh sách mẫu\n"
-        "🔔 /subscribe <mã> - bật theo dõi\n"
-        "🔕 /unsubscribe <mã> - tắt theo dõi\n"
+        "📊 /indicators <mã> - toàn bộ chỉ báo kỹ thuật\n"
+        "📋 /signals - quét danh sách mã tiêu biểu\n"
+        "🔔 /subscribe <mã> - thêm vào watchlist\n"
+        "🔕 /unsubscribe <mã> - xoá khỏi watchlist\n"
+        "👀 /watchlist - trạng thái tín hiệu các mã đang theo dõi\n"
+        "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore\n"
+        "🏭 /sector - tín hiệu tổng hợp theo ngành\n"
+        "🌡️ /regime - trạng thái VN-Index (Bullish/Non-Bullish)\n"
         "💚 /status - tình trạng dữ liệu bot\n"
-        "ℹ️ /about - giải thích chiến lược\n"
+        "ℹ️ /about - giải thích chiến lược & tính năng\n"
         "❓ /help - xem hướng dẫn\n\n"
         "Ví dụ: /check FPT"
     )
@@ -1166,12 +1365,12 @@ async def indicators_command(
 
         await update.message.reply_text(
             f"📊 CHỈ BÁO: {symbol}\n\n"
-            f"• Giá: {fmt(result['close'], 0)}\n"
-            f"• EMA20: {fmt(result['ema20'], 0)}\n"
-            f"• EMA50: {fmt(result['ema50'], 0)}\n"
-            f"• SMA20: {fmt(result['sma20'], 0)}\n"
-            f"• SMA50: {fmt(result['sma50'], 0)}\n"
-            f"• SMA200: {fmt(result['sma200'], 0)}\n"
+            f"• Giá: {price_fmt(result['close'])}\n"
+            f"• EMA20: {price_fmt(result['ema20'])}\n"
+            f"• EMA50: {price_fmt(result['ema50'])}\n"
+            f"• SMA20: {price_fmt(result['sma20'])}\n"
+            f"• SMA50: {price_fmt(result['sma50'])}\n"
+            f"• SMA200: {price_fmt(result['sma200'])}\n"
             f"• RSI14: {fmt(result['rsi14'], 1)} "
             f"(tham khảo - "
             f"{rsi_description(result['rsi14'])})\n"
@@ -1181,10 +1380,10 @@ async def indicators_command(
             f"• Stochastic %K: "
             f"{fmt(result['stoch_k'], 1)}\n"
             f"• Bollinger trên: "
-            f"{fmt(result['bb_upper'], 0)}\n"
+            f"{price_fmt(result['bb_upper'])}\n"
             f"• Bollinger dưới: "
-            f"{fmt(result['bb_lower'], 0)}\n"
-            f"• ATR14: {fmt(result['atr14'], 0)}\n"
+            f"{price_fmt(result['bb_lower'])}\n"
+            f"• ATR14: {price_fmt(result['atr14'])}\n"
             f"• Volume: {fmt(result['volume'], 0)}\n"
             f"• Volume MA20: "
             f"{fmt(result['volume_ma20'], 0)}",
@@ -1202,25 +1401,19 @@ async def signals(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     await update.message.reply_text(
-        "⌛ Đang quét các mã VN30 tiêu biểu..."
+        f"⌛ Đang quét {len(VN30_SYMBOLS)} mã tiêu biểu..."
     )
 
-    async def scan(symbol: str):
-        try:
-            return await run_analysis(symbol)
-        except Exception:
-            return None
+    results = await analyze_many(VN30_SYMBOLS)
+    bullish = market_regime()
 
-    results = await asyncio.gather(
-        *(scan(symbol) for symbol in VN30_SYMBOLS)
-    )
-
-    lines = ["📋 TÍN HIỆU VN30 TIÊU BIỂU\n"]
+    lines = [
+        "📋 TÍN HIỆU CÁC MÃ TIÊU BIỂU\n",
+        f"🌡️ Market Regime: "
+        f"{'🟢 Bullish' if bullish else '🔴 Non-Bullish'}\n",
+    ]
 
     for result in results:
-        if not result:
-            continue
-
         conclusion, _ = decision(result)
 
         lines.append(
@@ -1229,8 +1422,16 @@ async def signals(
             f"| 6M {percent(result['return_6m'])}"
         )
 
-    if len(lines) == 1:
+    if not results:
         lines.append("Không có mã đủ dữ liệu.")
+
+    lines.append(
+        "\nℹ️ Chú giải:\n"
+        "• RSI: sức mạnh giá 0-100, tham khảo (>70 quá mua, "
+        "<30 quá bán), không phải điều kiện MUA/BÁN.\n"
+        "• 6M: % thay đổi giá trong 6 tháng gần nhất (Return 6 "
+        "tháng), dùng để xếp hạng sức mạnh tương đối (RS)."
+    )
 
     await update.message.reply_text(
         "\n".join(lines)
@@ -1376,50 +1577,133 @@ async def regime(
         )
 
 
-async def positions(
+async def watchlist(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    data = load_json(SUBSCRIBERS_FILE, {})
-    if not isinstance(data, dict):
-        data = {}
-
+    """📋 Watchlist: các mã đã /subscribe, kèm trạng thái tín hiệu
+    MUA/THEO DÕI/KHÔNG MUA hiện tại. Đây KHÔNG phải phân bổ vốn — xem
+    /portfolio để phân bổ vốn theo SmartScore.
+    """
     if update.effective_user is None:
         await update.message.reply_text(
             "❌ Không xác định được tài khoản Telegram."
         )
         return
 
-    symbols = data.get(str(update.effective_user.id), [])
-    if not isinstance(symbols, list):
-        symbols = []
+    symbols = get_watchlist(str(update.effective_user.id))
 
     if not symbols:
         await update.message.reply_text(
-            "📂 POSITIONS / WATCHLIST\n\n"
+            "🔔 WATCHLIST\n\n"
             "Chưa có mã nào đang theo dõi.\n"
             "Dùng /subscribe FPT để thêm mã."
         )
         return
 
-    lines = ["📂 POSITIONS / WATCHLIST\n"]
+    lines = ["🔔 WATCHLIST (trạng thái tín hiệu)\n"]
 
     for symbol in symbols:
         try:
             result = await run_analysis(symbol)
             conclusion, _ = decision(result)
-            lines.append(f"{conclusion} {symbol}")
+
+            lines.append(
+                f"{conclusion} {symbol} "
+                f"| Giá {price_fmt(result['close'])} "
+                f"| RSI {fmt(result['rsi14'], 1)} "
+                f"| 6M {percent(result['return_6m'])}"
+            )
         except Exception as error:
             lines.append(f"⚪ {symbol}: {str(error)[:80]}")
+
+    lines.append(
+        "\n💼 Muốn xem phân bổ vốn theo các mã này? Dùng /portfolio"
+    )
 
     await update.message.reply_text("\n".join(lines))
 
 
-async def watchlist(
+async def positions(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    await positions(update, context)
+    """Alias tương thích ngược: /positions == /watchlist."""
+    await watchlist(update, context)
+
+
+async def portfolio(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """💼 Portfolio: phân bổ vốn theo SmartScore cho một danh sách mã.
+
+    Cách dùng:
+      /portfolio                  -> dùng watchlist đã /subscribe,
+                                      vốn mặc định 10.000.000 VNĐ
+      /portfolio 5000000          -> dùng watchlist, vốn tùy chỉnh
+      /portfolio 5000000 VIC FPT VNM -> chỉ định vốn và danh sách mã
+    """
+    if update.effective_user is None:
+        await update.message.reply_text(
+            "❌ Không xác định được tài khoản Telegram."
+        )
+        return
+
+    args = list(context.args or [])
+    capital = DEFAULT_PORTFOLIO_CAPITAL
+    symbols: list[str] = []
+
+    if args and args[0].replace(".", "").replace(",", "").isdigit():
+        capital = number(
+            args[0].replace(".", "").replace(",", ""),
+            DEFAULT_PORTFOLIO_CAPITAL,
+        )
+        args = args[1:]
+
+    for token in args:
+        token = token.strip().upper()
+
+        if token.isalnum() and 3 <= len(token) <= 10:
+            symbols.append(token)
+
+    if not symbols:
+        symbols = get_watchlist(str(update.effective_user.id))
+
+    if not symbols:
+        await update.message.reply_text(
+            "Chưa có mã nào để phân bổ.\n"
+            "Dùng /subscribe <mã> để thêm vào watchlist, hoặc:\n"
+            "/portfolio <vốn> <mã1> <mã2> ...\n"
+            "Ví dụ: /portfolio 5000000 VIC FPT VNM"
+        )
+        return
+
+    message = await update.message.reply_text(
+        f"⌛ Đang tối ưu danh mục {len(symbols)} mã..."
+    )
+
+    results = await analyze_many(symbols)
+
+    await message.edit_text(
+        portfolio_text(results, capital)
+    )
+
+
+async def sector(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """🏭 Sector: nhóm tín hiệu theo ngành cho danh sách mã tiêu biểu."""
+    message = await update.message.reply_text(
+        "⌛ Đang tổng hợp tín hiệu theo ngành..."
+    )
+
+    results = await analyze_many(VN30_SYMBOLS)
+
+    await message.edit_text(
+        sector_text(results)
+    )
 
 
 async def about(
@@ -1438,13 +1722,35 @@ async def about(
         "• EMA20 > EMA50\n"
         "• Volume ≥ Volume MA20\n"
         "• Giá đóng cửa tăng\n"
-        "• RSI14 chỉ mang tính tham khảo\n\n"
+        "• MACD/RSI14 chi tiết chỉ hiện ở /indicators (tham khảo)\n\n"
         "4️⃣ Risk / ATR:\n"
         "• ATR14 của phiên trước\n"
         "• Stop Loss = Giá - 2×ATR\n"
         "• Target = Giá + 4×ATR\n\n"
-        "/regime - trạng thái VN-Index\n"
-        "/positions hoặc /watchlist - mã đang theo dõi\n\n"
+
+        "🧰 TOÀN BỘ TÍNH NĂNG\n"
+        "📌 /check <mã> - tóm tắt một mã\n"
+        "🧩 /detail <mã> - xem đủ 4 tầng (không kèm MACD/RSI ở "
+        "tầng 3, xem ở /indicators)\n"
+        "📈 /chart <mã> - biểu đồ kỹ thuật\n"
+        "📊 /indicators <mã> - toàn bộ chỉ báo (EMA/SMA/RSI/"
+        "MACD/Stochastic/Bollinger/ATR)\n"
+        "📋 /signals - quét tín hiệu các mã tiêu biểu + chú giải "
+        "RSI, Return 6M\n"
+        "🔔 /subscribe, /unsubscribe <mã> - quản lý watchlist\n"
+        "👀 /watchlist (= /positions) - trạng thái tín hiệu các mã "
+        "đang theo dõi\n"
+        "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore "
+        "(Quality + Trend + Momentum + RS)\n"
+        "🏭 /sector - tín hiệu tổng hợp theo ngành, kèm Market Regime\n"
+        "🌡️ /regime - trạng thái VN-Index so với SMA200\n"
+        "💚 /status - tình trạng dữ liệu bot\n\n"
+
+        "ℹ️ Watchlist vs Portfolio:\n"
+        "• Watchlist = danh sách mã đang theo dõi trạng thái "
+        "MUA/THEO DÕI/KHÔNG MUA.\n"
+        "• Portfolio = gợi ý phân bổ VỐN cụ thể (%, số tiền) giữa "
+        "các mã, dựa trên SmartScore.\n\n"
         "⚠️ Không phải khuyến nghị đầu tư."
     )
 
@@ -1509,10 +1815,10 @@ async def callback(
 
             await query.message.reply_text(
                 f"📊 CHỈ BÁO: {symbol}\n\n"
-                f"• EMA20: {fmt(result['ema20'], 0)}\n"
-                f"• EMA50: {fmt(result['ema50'], 0)}\n"
-                f"• SMA20: {fmt(result['sma20'], 0)}\n"
-                f"• SMA50: {fmt(result['sma50'], 0)}\n"
+                f"• EMA20: {price_fmt(result['ema20'])}\n"
+                f"• EMA50: {price_fmt(result['ema50'])}\n"
+                f"• SMA20: {price_fmt(result['sma20'])}\n"
+                f"• SMA50: {price_fmt(result['sma50'])}\n"
                 f"• RSI14: {fmt(result['rsi14'], 1)} "
                 f"(tham khảo - "
                 f"{rsi_description(result['rsi14'])})\n"
@@ -1521,7 +1827,7 @@ async def callback(
                 f"{fmt(result['macd_signal'], 2)}\n"
                 f"• Stochastic %K: "
                 f"{fmt(result['stoch_k'], 1)}\n"
-                f"• ATR14: {fmt(result['atr14'], 0)}\n"
+                f"• ATR14: {price_fmt(result['atr14'])}\n"
                 f"• Volume: {fmt(result['volume'], 0)}\n"
                 f"• Volume MA20: "
                 f"{fmt(result['volume_ma20'], 0)}"
@@ -1551,6 +1857,47 @@ async def callback(
                 "Hãy kiểm tra matplotlib đã được cài đặt."
             )
 
+        return
+
+    if action == "portfolio":
+        try:
+            user_id = str(query.from_user.id)
+            symbols = get_watchlist(user_id) or [symbol]
+
+            results = await analyze_many(symbols)
+
+            await query.message.reply_text(
+                portfolio_text(
+                    results,
+                    DEFAULT_PORTFOLIO_CAPITAL,
+                )
+            )
+        except Exception as error:
+            await query.message.reply_text(
+                f"❌ Lỗi tạo danh mục:\n{error}"
+            )
+
+        return
+
+    if action == "sector":
+        try:
+            industry = INDUSTRIES.get(symbol, "Chưa xác định")
+            peers = [
+                item
+                for item, name in INDUSTRIES.items()
+                if name == industry
+            ] or [symbol]
+
+            results = await analyze_many(peers)
+
+            await query.message.reply_text(
+                sector_text(results)
+            )
+        except Exception as error:
+            await query.message.reply_text(
+                f"❌ Lỗi tổng hợp theo ngành:\n{error}"
+            )
+
 
 def main() -> None:
     application = (
@@ -1570,6 +1917,8 @@ def main() -> None:
         "regime": regime,
         "positions": positions,
         "watchlist": watchlist,
+        "portfolio": portfolio,
+        "sector": sector,
         "subscribe": subscribe,
         "unsubscribe": unsubscribe,
         "status": status,
