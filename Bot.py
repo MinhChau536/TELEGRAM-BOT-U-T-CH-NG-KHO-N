@@ -18,6 +18,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
+    filters,
 )
 
 import DNSE
@@ -84,6 +86,17 @@ CACHE: dict[str, tuple[float, object]] = {}
 
 ANALYSIS_POOL = ThreadPoolExecutor(max_workers=8)
 DATA_POOL = ThreadPoolExecutor(max_workers=12)
+
+# ---------------------------------------------------------------------------
+# Trạng thái phiên /portfolio theo từng user, để có thể "sửa vốn" / "thêm mã"
+# mà không cần gõ lại toàn bộ lệnh /portfolio <vốn> <mã...>.
+#
+# PORTFOLIO_SESSIONS[user_id] = {"capital": float, "symbols": list[str]}
+# PENDING_INPUT[user_id] = "capital" | "add_symbol"  (đang chờ người dùng
+# gõ tin nhắn tiếp theo để hoàn tất thao tác vừa bấm nút)
+# ---------------------------------------------------------------------------
+PORTFOLIO_SESSIONS: dict[str, dict] = {}
+PENDING_INPUT: dict[str, str] = {}
 
 
 def cache_get(key: str):
@@ -287,6 +300,77 @@ def load_prices(symbol: str, days: int = 420) -> pd.DataFrame:
 
     cache_set(cache_key, data)
     return data.copy()
+
+
+QUOTE_CACHE_TTL = 30  # ngắn hơn CACHE_TTL (300s) vì đây là dữ liệu
+                       # người dùng kỳ vọng gần thời gian thực nhất
+QUOTE_CACHE: dict[str, tuple[float, object]] = {}
+
+
+def load_intraday_today(
+    symbol: str,
+    resolution: str = "1",
+) -> pd.DataFrame:
+    """Lấy các nến intraday ĐÃ ĐÓNG của phiên hôm nay.
+
+    Lưu ý quan trọng: DNSE.py chỉ có API dạng nến OHLCV (fetch_prices),
+    KHÔNG có API quote/tick real-time riêng. Vì vậy "giá hiện tại" ở đây
+    thực chất là giá đóng cửa của nến 1 phút gần nhất ĐÃ HOÀN TẤT trong
+    phiên hôm nay (fetch_prices(..., closed_only=True) sẽ tự loại bỏ nến
+    đang chạy dở, theo drop_unclosed_candles trong DNSE.py) — đây là mức
+    gần với "hiện tại" nhất mà nguồn dữ liệu này có thể cho, không phải
+    tick-by-tick thật sự như trên bảng giá DNSE.
+    """
+    symbol = symbol.upper()
+    today = date.today()
+    cache_key = f"intraday:{symbol}:{resolution}:{today.isoformat()}"
+
+    item = QUOTE_CACHE.get(cache_key)
+    if item and time.time() - item[0] <= QUOTE_CACHE_TTL:
+        return item[1].copy()
+
+    try:
+        data = DNSE.fetch_prices(
+            symbol,
+            today,
+            today,
+            resolution,
+            closed_only=True,
+            source="auto",
+        )
+    except Exception:
+        data = pd.DataFrame()
+
+    QUOTE_CACHE[cache_key] = (time.time(), data)
+    return data.copy()
+
+
+def get_current_quote(symbol: str) -> dict:
+    """Trả về giá & khối lượng lũy kế GẦN VỚI HIỆN TẠI NHẤT trong phiên
+    hôm nay. Nếu chưa có nến nào đã đóng trong phiên hôm nay (trước giờ
+    mở cửa, ngày nghỉ giao dịch, hoặc gọi API lỗi), is_live = False và
+    nơi gọi nên tự hiểu là "chưa có dữ liệu real-time, dùng giá đóng cửa
+    phiên gần nhất (daily) để thay thế".
+    """
+    intraday = load_intraday_today(symbol, resolution="1")
+
+    if intraday is None or intraday.empty:
+        return {
+            "is_live": False,
+            "current_price": None,
+            "current_volume_today": None,
+            "quote_time": None,
+        }
+
+    intraday = intraday.sort_values("time")
+    last_bar = intraday.iloc[-1]
+
+    return {
+        "is_live": True,
+        "current_price": number(last_bar["close"]),
+        "current_volume_today": number(intraday["volume"].sum()),
+        "quote_time": last_bar["time"],
+    }
 
 
 def calculate_rsi(close: pd.Series, period: int = 14):
@@ -658,6 +742,7 @@ def analyze(symbol: str) -> dict:
 
     quality = financial_quality(symbol)
     regime = market_regime()
+    quote = get_current_quote(symbol)
 
     layer1 = quality["pass"]
 
@@ -680,7 +765,10 @@ def analyze(symbol: str) -> dict:
             symbol,
             "Chưa xác định",
         ),
-        "date": date.today().isoformat(),
+        # FIX: trước đây gán cứng = ngày hôm nay dù `latest` có thể là
+        # phiên trước (khi API 1D chưa cập nhật nến hôm nay). Giờ lấy
+        # đúng ngày của dòng dữ liệu đang dùng để tính toán.
+        "date": pd.Timestamp(latest["time"]).date().isoformat(),
         "close": close,
         "previous_close": previous_close,
         "ema20": ema20,
@@ -710,6 +798,13 @@ def analyze(symbol: str) -> dict:
         "layer2": layer2,
         "layer3": layer3,
         "layer4": True,
+        # Giá/khối lượng gần hiện tại nhất trong phiên hôm nay (xem
+        # get_current_quote). is_live=False nghĩa là chưa có nến intraday
+        # nào đóng hôm nay -> nên hiển thị cảnh báo, không có số real-time.
+        "quote_is_live": quote["is_live"],
+        "current_price": quote["current_price"],
+        "current_volume_today": quote["current_volume_today"],
+        "quote_time": quote["quote_time"],
     }
 
 
@@ -816,10 +911,21 @@ def quick_text(result: dict) -> str:
     return (
         f"📊 {result['symbol']}\n"
         f"🏭 Ngành: {result['industry']}\n"
-        f"📅 Ngày kiểm tra: {result['date']}\n"
-        f"💰 Giá đóng cửa: {price_fmt(result['close'])}\n\n"
-
-        "📈 CHỈ BÁO CHÍNH\n"
+        f"📅 Ngày kiểm tra: {result['date']} "
+        f"(dữ liệu daily gần nhất)\n"
+        f"💰 Giá đóng cửa: {price_fmt(result['close'])}\n"
+        + (
+            f"🔴 Giá hiện tại (phiên hôm nay, "
+            f"cập nhật {pd.Timestamp(result['quote_time']).strftime('%H:%M')}): "
+            f"{price_fmt(result['current_price'])}\n"
+            f"🔴 Khối lượng hôm nay (lũy kế): "
+            f"{fmt(result['current_volume_today'], 0)}\n\n"
+            if result["quote_is_live"]
+            else "⚪ Chưa có dữ liệu real-time hôm nay "
+                 "(trước giờ mở cửa / ngày nghỉ / API lỗi) — "
+                 "các số trên là của phiên gần nhất đã đóng.\n\n"
+        )
+        + "📈 CHỈ BÁO CHÍNH (tính trên dữ liệu daily)\n"
         f"• EMA20: {price_fmt(result['ema20'])}\n"
         f"• EMA50: {price_fmt(result['ema50'])}\n"
         f"• SMA20: {price_fmt(result['sma20'])}\n"
@@ -830,7 +936,8 @@ def quick_text(result: dict) -> str:
         f"(đang {macd_status})\n"
         f"• Stochastic %K: {fmt(result['stoch_k'], 1)} "
         f"({stoch_status})\n"
-        f"• Volume: {fmt(result['volume'], 0)}\n"
+        f"• Volume (phiên gần nhất): "
+        f"{fmt(result['volume'], 0)}\n"
         f"• Volume MA20: {fmt(result['volume_ma20'], 0)}\n"
         f"• ATR14: {price_fmt(result['atr14'])}\n\n"
 
@@ -1077,6 +1184,32 @@ def buttons(symbol: str) -> InlineKeyboardMarkup:
     )
 
 
+def portfolio_buttons() -> InlineKeyboardMarkup:
+    """Nút thao tác nhanh dưới kết quả /portfolio: cho phép sửa tổng vốn,
+    thêm mã mới, hoặc reset danh sách về đúng watchlist hiện tại, mà
+    không cần gõ lại lệnh /portfolio đầy đủ."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✏️ Sửa vốn",
+                    callback_data="pfcap:x",
+                ),
+                InlineKeyboardButton(
+                    "➕ Thêm mã",
+                    callback_data="pfadd:x",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 Reset theo watchlist",
+                    callback_data="pfreset:x",
+                ),
+            ],
+        ]
+    )
+
+
 def get_symbol(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> str | None:
@@ -1101,6 +1234,38 @@ async def run_analysis(symbol: str) -> dict:
         ANALYSIS_POOL,
         analyze,
         symbol,
+    )
+
+
+async def send_portfolio_update(
+    message,
+    user_id: str,
+    note: str | None = None,
+) -> None:
+    """Tính lại danh mục từ PORTFOLIO_SESSIONS[user_id] (sau khi vừa sửa
+    vốn hoặc thêm mã) và gửi/cập nhật kết quả kèm bộ nút thao tác."""
+    session = PORTFOLIO_SESSIONS.get(user_id)
+
+    if not session or not session.get("symbols"):
+        await message.reply_text(
+            "⚠️ Phiên danh mục đã hết hạn hoặc chưa có mã nào.\n"
+            "Hãy chạy lại /portfolio <vốn> <mã1> <mã2> ..."
+        )
+        return
+
+    waiting = await message.reply_text(
+        "⌛ Đang cập nhật danh mục..."
+    )
+
+    results = await analyze_many(session["symbols"])
+    text = portfolio_text(results, session["capital"])
+
+    if note:
+        text = f"{note}\n\n{text}"
+
+    await waiting.edit_text(
+        text,
+        reply_markup=portfolio_buttons(),
     )
 
 
@@ -1238,7 +1403,8 @@ async def start(
         "🔔 /subscribe <mã> - thêm vào watchlist\n"
         "🔕 /unsubscribe <mã> - xoá khỏi watchlist\n"
         "👀 /watchlist - trạng thái tín hiệu các mã đang theo dõi\n"
-        "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore\n"
+        "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore "
+        "(có thể sửa vốn / thêm mã ngay trong kết quả)\n"
         "🏭 /sector - tín hiệu tổng hợp theo ngành\n"
         "🌡️ /regime - trạng thái VN-Index (Bullish/Non-Bullish)\n"
         "💚 /status - tình trạng dữ liệu bot\n"
@@ -1643,12 +1809,17 @@ async def portfolio(
                                       vốn mặc định 10.000.000 VNĐ
       /portfolio 5000000          -> dùng watchlist, vốn tùy chỉnh
       /portfolio 5000000 VIC FPT VNM -> chỉ định vốn và danh sách mã
+
+    Sau khi có kết quả, người dùng có thể bấm nút "✏️ Sửa vốn" hoặc
+    "➕ Thêm mã" để chỉnh lại mà không cần gõ lại lệnh từ đầu.
     """
     if update.effective_user is None:
         await update.message.reply_text(
             "❌ Không xác định được tài khoản Telegram."
         )
         return
+
+    user_id = str(update.effective_user.id)
 
     args = list(context.args or [])
     capital = DEFAULT_PORTFOLIO_CAPITAL
@@ -1668,7 +1839,7 @@ async def portfolio(
             symbols.append(token)
 
     if not symbols:
-        symbols = get_watchlist(str(update.effective_user.id))
+        symbols = get_watchlist(user_id)
 
     if not symbols:
         await update.message.reply_text(
@@ -1679,6 +1850,13 @@ async def portfolio(
         )
         return
 
+    # Lưu lại phiên để có thể sửa vốn / thêm mã bằng nút bấm sau này.
+    PORTFOLIO_SESSIONS[user_id] = {
+        "capital": capital,
+        "symbols": list(symbols),
+    }
+    PENDING_INPUT.pop(user_id, None)
+
     message = await update.message.reply_text(
         f"⌛ Đang tối ưu danh mục {len(symbols)} mã..."
     )
@@ -1686,7 +1864,8 @@ async def portfolio(
     results = await analyze_many(symbols)
 
     await message.edit_text(
-        portfolio_text(results, capital)
+        portfolio_text(results, capital),
+        reply_markup=portfolio_buttons(),
     )
 
 
@@ -1741,7 +1920,8 @@ async def about(
         "👀 /watchlist (= /positions) - trạng thái tín hiệu các mã "
         "đang theo dõi\n"
         "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore "
-        "(Quality + Trend + Momentum + RS)\n"
+        "(Quality + Trend + Momentum + RS); có nút sửa vốn/thêm mã "
+        "ngay trong kết quả\n"
         "🏭 /sector - tín hiệu tổng hợp theo ngành, kèm Market Regime\n"
         "🌡️ /regime - trạng thái VN-Index so với SMA200\n"
         "💚 /status - tình trạng dữ liệu bot\n\n"
@@ -1753,6 +1933,116 @@ async def about(
         "các mã, dựa trên SmartScore.\n\n"
         "⚠️ Không phải khuyến nghị đầu tư."
     )
+
+
+async def handle_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Bắt tin nhắn văn bản thường (không phải lệnh /...) để hoàn tất
+    thao tác "Sửa vốn" hoặc "Thêm mã" sau khi người dùng bấm nút ở
+    dưới kết quả /portfolio. Nếu người dùng không có thao tác nào đang
+    chờ, bỏ qua tin nhắn (không phản hồi) để không gây nhiễu chat."""
+    if update.effective_user is None or update.message is None:
+        return
+
+    text = (update.message.text or "").strip()
+    if not text:
+        return
+
+    user_id = str(update.effective_user.id)
+    pending = PENDING_INPUT.get(user_id)
+
+    if not pending:
+        return
+
+    session = PORTFOLIO_SESSIONS.setdefault(
+        user_id,
+        {"capital": DEFAULT_PORTFOLIO_CAPITAL, "symbols": []},
+    )
+
+    if pending == "capital":
+        cleaned = (
+            text.replace(".", "")
+            .replace(",", "")
+            .replace(" ", "")
+            .replace("đ", "")
+            .replace("Đ", "")
+            .replace("vnd", "")
+            .replace("VND", "")
+        )
+
+        if not cleaned.isdigit():
+            await update.message.reply_text(
+                "❌ Vốn không hợp lệ. Hãy nhập số, ví dụ: 20000000 "
+                "hoặc 20.000.000"
+            )
+            return
+
+        new_capital = number(cleaned, session["capital"])
+
+        if new_capital <= 0:
+            await update.message.reply_text(
+                "❌ Tổng vốn phải lớn hơn 0."
+            )
+            return
+
+        session["capital"] = new_capital
+        PENDING_INPUT.pop(user_id, None)
+
+        await send_portfolio_update(
+            update.message,
+            user_id,
+            note=f"✅ Đã cập nhật tổng vốn: {fmt(new_capital, 0)} VNĐ",
+        )
+        return
+
+    if pending == "add_symbol":
+        tokens = [
+            token.strip().upper()
+            for token in text.replace(",", " ").split()
+        ]
+
+        added = []
+        invalid = []
+
+        for token in tokens:
+            if not token:
+                continue
+
+            if not (token.isalnum() and 3 <= len(token) <= 10):
+                invalid.append(token)
+                continue
+
+            if token in session["symbols"]:
+                continue
+
+            session["symbols"].append(token)
+            added.append(token)
+
+        PENDING_INPUT.pop(user_id, None)
+
+        if not added:
+            reason = (
+                f" (không hợp lệ: {', '.join(invalid)})"
+                if invalid
+                else " (mã đã có sẵn trong danh mục)"
+            )
+            await update.message.reply_text(
+                f"❌ Không thêm được mã nào{reason}."
+            )
+            return
+
+        note = f"✅ Đã thêm: {', '.join(added)}"
+        if invalid:
+            note += f"\n⚠️ Bỏ qua (không hợp lệ): {', '.join(invalid)}"
+
+        await send_portfolio_update(
+            update.message,
+            user_id,
+            note=note,
+        )
+        return
 
 
 async def callback(
@@ -1864,13 +2154,22 @@ async def callback(
             user_id = str(query.from_user.id)
             symbols = get_watchlist(user_id) or [symbol]
 
+            # Khởi tạo phiên danh mục để các nút Sửa vốn/Thêm mã hoạt
+            # động luôn từ kết quả mở qua nút "💼 Danh mục" của /check.
+            PORTFOLIO_SESSIONS[user_id] = {
+                "capital": DEFAULT_PORTFOLIO_CAPITAL,
+                "symbols": list(symbols),
+            }
+            PENDING_INPUT.pop(user_id, None)
+
             results = await analyze_many(symbols)
 
             await query.message.reply_text(
                 portfolio_text(
                     results,
                     DEFAULT_PORTFOLIO_CAPITAL,
-                )
+                ),
+                reply_markup=portfolio_buttons(),
             )
         except Exception as error:
             await query.message.reply_text(
@@ -1897,6 +2196,52 @@ async def callback(
             await query.message.reply_text(
                 f"❌ Lỗi tổng hợp theo ngành:\n{error}"
             )
+
+        return
+
+    if action in ("pfcap", "pfadd", "pfreset"):
+        user_id = str(query.from_user.id)
+        session = PORTFOLIO_SESSIONS.get(user_id)
+
+        if not session:
+            await query.message.reply_text(
+                "⚠️ Phiên danh mục đã hết hạn, hãy chạy lại /portfolio."
+            )
+            return
+
+        if action == "pfcap":
+            PENDING_INPUT[user_id] = "capital"
+            await query.message.reply_text(
+                "✏️ Nhập tổng vốn mới (VD: 20000000 hoặc 20.000.000):"
+            )
+            return
+
+        if action == "pfadd":
+            PENDING_INPUT[user_id] = "add_symbol"
+            await query.message.reply_text(
+                "➕ Nhập mã muốn thêm (VD: VIC hoặc VIC FPT VNM):"
+            )
+            return
+
+        if action == "pfreset":
+            watchlist_symbols = get_watchlist(user_id)
+
+            if not watchlist_symbols:
+                await query.message.reply_text(
+                    "⚠️ Watchlist đang trống. Dùng /subscribe <mã> "
+                    "trước khi reset."
+                )
+                return
+
+            session["symbols"] = list(watchlist_symbols)
+            PENDING_INPUT.pop(user_id, None)
+
+            await send_portfolio_update(
+                query.message,
+                user_id,
+                note="🔄 Đã đặt lại danh mục theo watchlist hiện tại",
+            )
+            return
 
 
 def main() -> None:
@@ -1932,6 +2277,12 @@ def main() -> None:
 
     application.add_handler(
         CallbackQueryHandler(callback)
+    )
+
+    # Bắt tin nhắn văn bản thường để hoàn tất "Sửa vốn" / "Thêm mã"
+    # sau khi người dùng bấm nút dưới kết quả /portfolio.
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)
     )
 
     print("🤖 Fintech Signal Bot đang chạy...")
