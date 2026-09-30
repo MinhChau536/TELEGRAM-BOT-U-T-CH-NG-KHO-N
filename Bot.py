@@ -9,10 +9,17 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
+from threading import Lock
 
 import pandas as pd
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    MenuButtonCommands,
+    Update,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -83,6 +90,7 @@ DEFAULT_PORTFOLIO_CAPITAL = 10_000_000.0
 
 CACHE_TTL = 300
 CACHE: dict[str, tuple[float, object]] = {}
+INDUSTRY_LOCK = Lock()
 
 ANALYSIS_POOL = ThreadPoolExecutor(max_workers=8)
 DATA_POOL = ThreadPoolExecutor(max_workers=12)
@@ -116,6 +124,35 @@ def cache_get(key: str):
 
 def cache_set(key: str, value) -> None:
     CACHE[key] = (time.time(), value)
+
+
+def get_industry(symbol: str) -> str:
+    cached = cache_get("industries:listing")
+
+    if not isinstance(cached, dict):
+        with INDUSTRY_LOCK:
+            cached = cache_get("industries:listing")
+
+            if not isinstance(cached, dict):
+                try:
+                    from vnstock import Listing
+
+                    listing = Listing().symbols_by_industries()
+                    cached = dict(
+                        zip(
+                            listing["symbol"].astype(str).str.upper(),
+                            listing["industry_name"].astype(str),
+                        )
+                    )
+                except Exception:
+                    cached = {}
+
+                cache_set("industries:listing", cached)
+
+    return cached.get(
+        symbol.upper(),
+        INDUSTRIES.get(symbol.upper(), "Chưa xác định"),
+    )
 
 
 def number(value, default: float = 0.0) -> float:
@@ -761,10 +798,7 @@ def analyze(symbol: str) -> dict:
 
     return {
         "symbol": symbol,
-        "industry": INDUSTRIES.get(
-            symbol,
-            "Chưa xác định",
-        ),
+        "industry": get_industry(symbol),
         # FIX: trước đây gán cứng = ngày hôm nay dù `latest` có thể là
         # phiên trước (khi API 1D chưa cập nhật nến hôm nay). Giờ lấy
         # đúng ngày của dòng dữ liệu đang dùng để tính toán.
@@ -910,7 +944,7 @@ def quick_text(result: dict) -> str:
 
     return (
         f"📊 {result['symbol']}\n"
-        f"🏭 Ngành: {result['industry']}\n"
+        f"🏭 Ngành/lĩnh vực: {result['industry']}\n"
         f"📅 Ngày kiểm tra: {result['date']} "
         f"(dữ liệu daily gần nhất)\n"
         f"💰 Giá đóng cửa: {price_fmt(result['close'])}\n"
@@ -950,6 +984,19 @@ def quick_text(result: dict) -> str:
         f"{price_fmt(result['stop_loss'])}\n"
         f"🎯 Mục tiêu gần: "
         f"{price_fmt(result['target'])}\n\n"
+        "📐 CƠ SỞ CÁC MỨC GIÁ (tham khảo)\n"
+        f"• Dùng giá đóng cửa daily {price_fmt(result['close'])}; "
+        f"ATR14 phiên trước {price_fmt(result['atr14'])} là biên độ "
+        "dao động trung bình 14 phiên.\n"
+        "• Vùng mua = [giá đóng cửa − 1×ATR14, giá đóng cửa], "
+        "không phải vùng hỗ trợ chắc chắn.\n"
+        "• Kháng cự = Bollinger trên 20 phiên "
+        "(SMA20 + 2 độ lệch chuẩn); chỉ là mốc tham khảo, "
+        "không phải lệnh bán tự động.\n"
+        "• Stop Loss = giá đóng cửa − 2×ATR14; mức rủi ro "
+        "tham chiếu khoảng 2 ATR mỗi cổ phiếu.\n"
+        "• Mục tiêu = giá đóng cửa + 4×ATR14; tỷ lệ lời/rủi ro "
+        "danh nghĩa khoảng 2:1 tính từ giá đóng cửa.\n\n"
 
         "🧩 KẾT QUẢ 4 TẦNG\n"
         f"1️⃣ QUALITY / CƠ BẢN: "
@@ -973,7 +1020,7 @@ def detail_text(result: dict) -> str:
 
     return (
         f"🧩 CHI TIẾT 4 TẦNG: {result['symbol']}\n"
-        f"🏭 Ngành: {result['industry']}\n"
+        f"🏭 Ngành/lĩnh vực: {result['industry']}\n"
         f"📅 Ngày kiểm tra: {result['date']}\n"
         f"💰 Giá đóng cửa: {price_fmt(result['close'])}\n\n"
 
@@ -1008,9 +1055,16 @@ def detail_text(result: dict) -> str:
 
         f"4️⃣ RISK / ATR: "
         f"{pass_text(result['layer4'])}\n"
+        f"├ Vùng mua (close−ATR đến close): "
+        f"{price_fmt(result['buy_low'])} – "
+        f"{price_fmt(result['buy_high'])}\n"
+        f"├ Kháng cự tham khảo (Bollinger trên): "
+        f"{price_fmt(result['bb_upper'])}\n"
         f"├ ATR14 phiên trước: {price_fmt(result['atr14'])}\n"
-        f"├ Stop Loss: {price_fmt(result['stop_loss'])}\n"
-        f"└ Target: {price_fmt(result['target'])}\n\n"
+        f"├ Stop Loss (close−2×ATR): "
+        f"{price_fmt(result['stop_loss'])}\n"
+        f"└ Target (close+4×ATR): "
+        f"{price_fmt(result['target'])}\n\n"
 
         f"🏁 KẾT LUẬN: {conclusion}\n"
         f"🧠 Lí do: {reason}\n"
@@ -1727,15 +1781,37 @@ async def regime(
         latest = data.iloc[-1]
         close = number(latest["close"])
         sma200 = number(latest["sma200"])
-        bullish = sma200 > 0 and close > sma200
+        has_sma200 = sma200 > 0
+        bullish = has_sma200 and close > sma200
+        state = (
+            "🟢 Bullish"
+            if bullish
+            else "🔴 Non-Bullish"
+            if has_sma200
+            else "⚪ Chưa đủ dữ liệu"
+        )
+        date_text = pd.Timestamp(latest["time"]).date().isoformat()
+        distance_text = (
+            f"{fmt(close - sma200, 2)} điểm "
+            f"({fmt((close - sma200) / sma200 * 100, 2)}%)"
+            if has_sma200
+            else "chưa tính được"
+        )
 
         await message.edit_text(
             "🌡️ MARKET REGIME\n\n"
-            f"• VN-Index: {fmt(close, 2)}\n"
+            f"• Phiên dữ liệu daily gần nhất: {date_text}\n"
+            f"• VN-Index đóng cửa: {fmt(close, 2)}\n"
             f"• SMA200: {fmt(sma200, 2)}\n"
-            f"• Trạng thái: "
-            f"{'🟢 Bullish' if bullish else '🔴 Non-Bullish'}\n\n"
-            "Điều kiện Tầng 2: VN-Index > SMA200."
+            f"• Chênh lệch so SMA200: {distance_text}\n"
+            f"• Trạng thái: {state}\n\n"
+            "🔎 Diễn giải:\n"
+            "• SMA200 là trung bình giá đóng cửa 200 phiên; "
+            "VN-Index cao hơn đường này thì thị trường được xem là "
+            "Bullish, ngược lại là Non-Bullish.\n"
+            "• Đây là bộ lọc xu hướng chung, không phải tín hiệu mua "
+            "riêng cho một cổ phiếu. Tầng Daily Trend còn kiểm tra "
+            "Giá cổ phiếu > SMA20 > SMA50."
         )
     except Exception as error:
         await message.edit_text(
@@ -1767,27 +1843,66 @@ async def watchlist(
         )
         return
 
-    lines = ["🔔 WATCHLIST (trạng thái tín hiệu)\n"]
+    header = (
+        "🔔 WATCHLIST (trạng thái tín hiệu)\n\n"
+        "Trend = Giá>SMA20 và SMA20>SMA50; Momentum = "
+        "EMA20>EMA50, Khối lượng≥MA20 và giá tăng; "
+        "VN-Index>SMA200 là bộ lọc thị trường.\n\n"
+    )
+    blocks = []
 
     for symbol in symbols:
         try:
             result = await run_analysis(symbol)
-            conclusion, _ = decision(result)
+            conclusion, reason = decision(result)
 
-            lines.append(
-                f"{conclusion} {symbol} "
-                f"| Giá {price_fmt(result['close'])} "
-                f"| RSI {fmt(result['rsi14'], 1)} "
-                f"| 6M {percent(result['return_6m'])}"
+            blocks.append(
+                f"{conclusion} {symbol} | Ngành/lĩnh vực: "
+                f"{result['industry']}\n"
+                f"• Giá {price_fmt(result['close'])}; RSI14 "
+                f"{fmt(result['rsi14'], 1)} "
+                f"({rsi_description(result['rsi14'])}); "
+                f"Return 6M {percent(result['return_6m'])}.\n"
+                f"• Trend: Giá>SMA20 "
+                f"{pass_text(result['close'] > result['sma20'])} "
+                f"({price_fmt(result['close'])} / "
+                f"{price_fmt(result['sma20'])}); SMA20>SMA50 "
+                f"{pass_text(result['sma20'] > result['sma50'])} "
+                f"({price_fmt(result['sma20'])} / "
+                f"{price_fmt(result['sma50'])}); "
+                f"VN-Index>SMA200 {pass_text(result['regime'])}.\n"
+                f"• Momentum: EMA20>EMA50 "
+                f"{pass_text(result['ema20'] > result['ema50'])}; "
+                f"Volume≥MA20 "
+                f"{pass_text(result['volume'] >= result['volume_ma20'])} "
+                f"({fmt(result['volume'], 0)} / "
+                f"{fmt(result['volume_ma20'], 0)}); giá tăng "
+                f"{pass_text(result['close'] > result['previous_close'])}.\n"
+                f"• Kết luận vì: {reason}\n\n"
             )
         except Exception as error:
-            lines.append(f"⚪ {symbol}: {str(error)[:80]}")
+            blocks.append(f"⚪ {symbol}: {str(error)[:80]}\n\n")
 
-    lines.append(
-        "\n💼 Muốn xem phân bổ vốn theo các mã này? Dùng /portfolio"
+    blocks.append(
+        "💼 Watchlist chỉ theo dõi trạng thái, không phân bổ vốn. "
+        "Dùng /portfolio để xem tỷ trọng tham khảo."
     )
 
-    await update.message.reply_text("\n".join(lines))
+    messages = []
+    current = header
+
+    for block in blocks:
+        if len(current) + len(block) > 3500 and current != header:
+            messages.append(current.rstrip())
+            current = header
+
+        current += block
+
+    if current.strip():
+        messages.append(current.rstrip())
+
+    for text in messages:
+        await update.message.reply_text(text)
 
 
 async def positions(
@@ -1890,47 +2005,66 @@ async def about(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     await update.message.reply_text(
-        "ℹ️ CHIẾN LƯỢC 4 TẦNG\n\n"
-        "1️⃣ Quality / Cơ bản:\n"
-        "• Profit Growth YoY ≥ 15%\n"
-        "• ROE TTM ≥ 10%\n\n"
-        "2️⃣ Daily Trend:\n"
-        "• Giá > SMA20 > SMA50\n"
-        "• Theo dõi thêm Return 6M và RS Percentile\n\n"
-        "3️⃣ Momentum:\n"
-        "• EMA20 > EMA50\n"
-        "• Volume ≥ Volume MA20\n"
-        "• Giá đóng cửa tăng\n"
-        "• MACD/RSI14 chi tiết chỉ hiện ở /indicators (tham khảo)\n\n"
-        "4️⃣ Risk / ATR:\n"
-        "• ATR14 của phiên trước\n"
-        "• Stop Loss = Giá - 2×ATR\n"
-        "• Target = Giá + 4×ATR\n\n"
-
-        "🧰 TOÀN BỘ TÍNH NĂNG\n"
-        "📌 /check <mã> - tóm tắt một mã\n"
-        "🧩 /detail <mã> - xem đủ 4 tầng (không kèm MACD/RSI ở "
-        "tầng 3, xem ở /indicators)\n"
+        "ℹ️ CÁCH BOT ĐỌC TÍN HIỆU\n\n"
+        "📊 Dữ liệu: chỉ báo tính từ OHLCV daily của phiên gần nhất "
+        "đã có dữ liệu; giá trong phiên (nếu có) được hiển thị riêng. "
+        "Ngành/lĩnh vực tra theo phân loại ICB của vnstock, có danh sách "
+        "dự phòng cho một số mã quen thuộc.\n\n"
+        "1️⃣ QUALITY / CƠ BẢN\n"
+        "• Profit Growth YoY ≥ 15%: lợi nhuận sau thuế tăng ít nhất "
+        "15% so với cùng kỳ năm trước.\n"
+        "• ROE TTM ≥ 10%: lợi nhuận trên vốn chủ sở hữu trong 12 tháng "
+        "gần nhất đạt ít nhất 10%. Cả hai điều kiện phải đạt để PASS.\n\n"
+        "2️⃣ DAILY TREND\n"
+        "• Giá > SMA20 > SMA50: giá đóng cửa cao hơn trung bình đơn "
+        "giản 20 phiên, và SMA20 cao hơn SMA50. SMA ngắn hạn trên SMA "
+        "dài hạn cho thấy xu hướng giá đang cải thiện.\n"
+        "• Return 6M = mức thay đổi giá trong khoảng 126 phiên.\n"
+        "• RS Percentile xếp hạng Return 6M tương đối với nhóm VN30; "
+        "đây là thứ hạng tương đối, không phải xác suất sinh lời.\n"
+        "• Market Regime (VN-Index>SMA200) là bối cảnh chung, xem "
+        "riêng ở /regime và được cộng điểm trong SmartScore; nó không "
+        "quyết định PASS/FAIL của Daily Trend.\n\n"
+        "3️⃣ MOMENTUM\n"
+        "• EMA20 > EMA50: đường trung bình lũy thừa ngắn hạn cao hơn "
+        "đường dài hạn.\n"
+        "• Volume ≥ Volume MA20: khối lượng phiên gần nhất ít nhất "
+        "bằng trung bình 20 phiên.\n"
+        "• Giá đóng cửa > giá đóng cửa phiên trước. Cả ba điều kiện "
+        "phải đạt; MACD/RSI/Stochastic là chỉ báo tham khảo, không thay "
+        "thế điều kiện PASS này.\n\n"
+        "4️⃣ RISK / MỨC GIÁ THAM KHẢO\n"
+        "• True Range mỗi phiên là giá trị lớn nhất giữa High−Low, "
+        "|High−Close phiên trước| và |Low−Close phiên trước|. ATR14 "
+        "là trung bình True Range 14 phiên; bot dùng ATR của phiên "
+        "daily trước đó.\n"
+        "• Vùng mua = [giá đóng cửa gần nhất − ATR14, giá đóng cửa].\n"
+        "• Kháng cự = Bollinger trên 20 phiên = SMA20 + 2×độ lệch "
+        "chuẩn 20 phiên.\n"
+        "• Stop Loss tham khảo = giá đóng cửa − 2×ATR14; mục tiêu gần "
+        "= giá đóng cửa + 4×ATR14, tương ứng tỷ lệ danh nghĩa 2:1.\n"
+        "• Các mốc này là phép tính biến động, không phải hỗ trợ/kháng "
+        "cự chắc chắn hoặc lệnh giao dịch; cần tự cân nhắc thanh khoản, "
+        "trượt giá và khẩu vị rủi ro.\n\n"
+        "🧩 Kết luận MUA THĂM DÒ chỉ xuất hiện khi 4 tầng đều PASS; "
+        "THEO DÕI khi Quality và Daily Trend đạt; các trường hợp khác "
+        "là KHÔNG MUA theo bộ lọc hiện tại.\n\n"
+        "🧰 LỆNH BOT\n"
+        "📌 /check <mã> - tóm tắt, ngành và các mốc giá\n"
+        "🧩 /detail <mã> - điều kiện PASS/FAIL từng tầng\n"
         "📈 /chart <mã> - biểu đồ kỹ thuật\n"
-        "📊 /indicators <mã> - toàn bộ chỉ báo (EMA/SMA/RSI/"
-        "MACD/Stochastic/Bollinger/ATR)\n"
-        "📋 /signals - quét tín hiệu các mã tiêu biểu + chú giải "
-        "RSI, Return 6M\n"
-        "🔔 /subscribe, /unsubscribe <mã> - quản lý watchlist\n"
-        "👀 /watchlist (= /positions) - trạng thái tín hiệu các mã "
-        "đang theo dõi\n"
-        "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore "
-        "(Quality + Trend + Momentum + RS); có nút sửa vốn/thêm mã "
-        "ngay trong kết quả\n"
-        "🏭 /sector - tín hiệu tổng hợp theo ngành, kèm Market Regime\n"
-        "🌡️ /regime - trạng thái VN-Index so với SMA200\n"
-        "💚 /status - tình trạng dữ liệu bot\n\n"
-
-        "ℹ️ Watchlist vs Portfolio:\n"
-        "• Watchlist = danh sách mã đang theo dõi trạng thái "
-        "MUA/THEO DÕI/KHÔNG MUA.\n"
-        "• Portfolio = gợi ý phân bổ VỐN cụ thể (%, số tiền) giữa "
-        "các mã, dựa trên SmartScore.\n\n"
+        "📊 /indicators <mã> - EMA/SMA/RSI/MACD/Stochastic/"
+        "Bollinger/ATR\n"
+        "📋 /signals - tín hiệu các mã tiêu biểu\n"
+        "🔔 /subscribe <mã>, /unsubscribe <mã> - quản lý watchlist\n"
+        "👀 /watchlist - tín hiệu và giải thích các mã đang theo dõi\n"
+        "💼 /portfolio [vốn] [mã...] - phân bổ vốn theo SmartScore\n"
+        "🏭 /sector - tổng hợp tín hiệu theo ngành\n"
+        "🌡️ /regime - VN-Index so với SMA200, kèm diễn giải\n"
+        "💚 /status - tình trạng dữ liệu bot\n"
+        "ℹ️ /about, /help - xem hướng dẫn\n\n"
+        "Watchlist chỉ theo dõi tín hiệu MUA/THEO DÕI/KHÔNG MUA; "
+        "Portfolio mới tính tỷ trọng và số tiền tham khảo.\n\n"
         "⚠️ Không phải khuyến nghị đầu tư."
     )
 
@@ -2244,10 +2378,39 @@ async def callback(
             return
 
 
+async def setup_bot_menu(application: Application) -> None:
+    commands = [
+        BotCommand("start", "Mở hướng dẫn và lệnh bot"),
+        BotCommand("check", "Tra cứu cổ phiếu: /check FPT"),
+        BotCommand("detail", "Chi tiết 4 tầng: /detail FPT"),
+        BotCommand("chart", "Biểu đồ: /chart FPT"),
+        BotCommand("indicators", "Chỉ báo: /indicators FPT"),
+        BotCommand("signals", "Quét tín hiệu cổ phiếu"),
+        BotCommand("subscribe", "Thêm mã theo dõi: /subscribe FPT"),
+        BotCommand("unsubscribe", "Bỏ mã theo dõi: /unsubscribe FPT"),
+        BotCommand("watchlist", "Xem và hiểu tín hiệu watchlist"),
+        BotCommand("portfolio", "Phân bổ vốn tham khảo"),
+        BotCommand("sector", "Tín hiệu tổng hợp theo ngành"),
+        BotCommand("regime", "Xu hướng chung VN-Index/SMA200"),
+        BotCommand("status", "Tình trạng dữ liệu bot"),
+        BotCommand("about", "Giải thích chiến lược và công thức"),
+        BotCommand("help", "Xem hướng dẫn sử dụng"),
+    ]
+
+    try:
+        await application.bot.set_my_commands(commands)
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonCommands()
+        )
+    except Exception as error:
+        print(f"Không cập nhật được menu Telegram: {error}")
+
+
 def main() -> None:
     application = (
         Application.builder()
         .token(TOKEN)
+        .post_init(setup_bot_menu)
         .build()
     )
 
